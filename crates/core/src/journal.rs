@@ -11,7 +11,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
@@ -98,10 +98,13 @@ impl Journal {
     /// write) is dropped and cut from the file.
     pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
         let path = path.as_ref().to_path_buf();
+        // Plain write access rather than append mode: Windows refuses `set_len` on append-only
+        // handles. We are the only writer, so writing at the end we track is equivalent.
         let mut file = OpenOptions::new()
             .read(true)
-            .append(true)
+            .write(true)
             .create(true)
+            .truncate(false)
             .open(&path)?;
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)?;
@@ -134,6 +137,7 @@ impl Journal {
             journal.file.set_len(good_len as u64)?;
             journal.file.sync_data()?;
         }
+        journal.file.seek(SeekFrom::Start(good_len as u64))?;
         Ok(journal)
     }
 
@@ -289,6 +293,7 @@ impl Journal {
     fn compact_if_clean(&mut self) -> io::Result<()> {
         if self.open.is_empty() && self.file.metadata()?.len() > 0 {
             self.file.set_len(0)?;
+            self.file.seek(SeekFrom::Start(0))?;
             self.file.sync_data()?;
         }
         Ok(())
@@ -332,6 +337,16 @@ mod tests {
         j.undo(id, || Ok::<_, Infallible>(())).unwrap();
         assert!(j.pending().is_empty());
         assert_eq!(std::fs::metadata(&path).unwrap().len(), 0);
+
+        // After compaction, new entries start at the beginning of the file again.
+        j.apply(ActionKind::KeepAwake, None, || {
+            Ok::<_, Infallible>(record(8))
+        })
+        .unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(text.lines().count(), 2, "{text:?}");
+        assert!(!text.starts_with('\0'));
+        assert_eq!(Journal::open(&path).unwrap().pending().len(), 1);
     }
 
     #[test]
