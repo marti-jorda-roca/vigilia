@@ -19,7 +19,6 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 clap = { version = "4.6", features = ["derive"] }
 core-foundation = "0.10"
 directories = "6"
-fs4 = { version = "1.1", features = ["sync"] }
 libc = "0.2"
 schemars = { version = "1.2", features = ["chrono04"] }
 serde = { version = "1", features = ["derive"] }
@@ -29,7 +28,7 @@ tokio = { version = "1.53", default-features = false, features = ["rt", "net", "
 toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
 tracing = "0.1"
 tracing-appender = "0.2"
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "std"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 
 proptest = "1.12"
