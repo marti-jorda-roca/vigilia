@@ -17,6 +17,8 @@ Work in progress towards v0.1 (macOS idle-sleep sessions from the CLI).
 |---|---|
 | `crates/protocol` | Wire types (requests, responses, events), `ClientContext` and scopes, the generated JSON Schema |
 | `crates/core` | Session state machine, recovery journal, config, paths. No OS code |
+| `crates/platform` | `Platform` trait and `Capabilities`; macOS backend (idle-sleep assertion, GCD deadline timer), stubs for Linux and Windows, `FakePlatform` for tests |
+| `crates/daemon` | The service: dispatch with scope checks, event bus, owner-only Unix socket, instance lock, launchd socket activation, idle exit |
 
 ## Development
 

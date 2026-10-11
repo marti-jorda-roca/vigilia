@@ -102,6 +102,12 @@ impl SessionMachine {
         Ok(live.session.clone())
     }
 
+    /// Drops a session that just started because applying it to the OS failed. There is nothing
+    /// to undo, so it never goes through `Ending`.
+    pub fn discard(&mut self) {
+        self.live = None;
+    }
+
     /// Moves to `Ending` so the caller can run the undo steps. Also used to retry after
     /// `NeedsAttention`.
     pub fn begin_end(&mut self) -> Result<Session, SessionError> {
