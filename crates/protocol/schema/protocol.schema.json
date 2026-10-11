@@ -1,0 +1,479 @@
+{
+  "$defs": {
+    "CallResult": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HelloResult"
+        },
+        {
+          "$ref": "#/$defs/SessionResult"
+        },
+        {
+          "$ref": "#/$defs/Empty"
+        }
+      ],
+      "description": "The possible `result` shapes. Clients know which one to expect from the method they called;\nthis type exists for the JSON Schema."
+    },
+    "Capabilities": {
+      "description": "What this OS and machine support, so clients can hide what isn't available.",
+      "properties": {
+        "keep_awake_idle": {
+          "default": false,
+          "description": "Prevent idle sleep while the lid is open.",
+          "type": "boolean"
+        },
+        "keep_awake_lid_closed": {
+          "default": false,
+          "description": "Keep running with the lid closed.",
+          "type": "boolean"
+        },
+        "socket_activation": {
+          "default": false,
+          "description": "The service was started by the OS on the first connection (launchd / systemd).",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "Empty": {
+      "type": "object"
+    },
+    "ErrorBody": {
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "ErrorCode": {
+      "oneOf": [
+        {
+          "enum": [
+            "bad_request",
+            "unsupported_version",
+            "forbidden",
+            "no_session",
+            "session_active",
+            "unsupported",
+            "internal"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "unknown",
+          "description": "A code added by a newer service. Treat it like `internal`.",
+          "type": "string"
+        }
+      ]
+    },
+    "Event": {
+      "oneOf": [
+        {
+          "description": "The session started, was extended, or ended. `session` is `None` when there is none.",
+          "properties": {
+            "event": {
+              "const": "session_changed",
+              "type": "string"
+            },
+            "session": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Session"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Something clients should show, but that doesn't stop the session.",
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "event": {
+              "const": "warning",
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "kind",
+            "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An undo step failed; the machine may not sleep normally until this is resolved.",
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "event": {
+              "const": "needs_attention",
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "detail"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EventKind": {
+      "enum": [
+        "session_changed",
+        "warning",
+        "needs_attention"
+      ],
+      "type": "string"
+    },
+    "HelloResult": {
+      "properties": {
+        "capabilities": {
+          "$ref": "#/$defs/Capabilities"
+        },
+        "protocol_version": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scopes": {
+          "description": "The scopes this connection holds.",
+          "items": {
+            "$ref": "#/$defs/Scope"
+          },
+          "type": "array"
+        },
+        "server_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocol_version",
+        "server_version",
+        "capabilities",
+        "scopes"
+      ],
+      "type": "object"
+    },
+    "HumanDuration": {
+      "description": "One or more <number><unit> groups, units d, h, m, s. Example: \"1d2h30m\".",
+      "pattern": "^([0-9]+[dhmsDHMS])+$",
+      "type": "string"
+    },
+    "Request": {
+      "description": "One request from a client. `id` is echoed in the response; `v` is the protocol version the\nclient speaks.",
+      "oneOf": [
+        {
+          "description": "Returns the protocol version, capabilities, and the scopes this client holds.",
+          "properties": {
+            "method": {
+              "const": "hello",
+              "type": "string"
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "session.start",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/SessionStartParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "session.extend",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/SessionExtendParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "session.stop",
+              "type": "string"
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "session.status",
+              "type": "string"
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "After a successful response, matching events are streamed on the same connection.",
+          "properties": {
+            "method": {
+              "const": "subscribe",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/SubscribeParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "id": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "v"
+      ],
+      "type": "object"
+    },
+    "Response": {
+      "description": "The reply to one request. Exactly one of `result` and `error` is set, matching `ok`.",
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorBody"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "description": "The request's `id`, or `null` if the request was too malformed to have one.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CallResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "ok"
+      ],
+      "type": "object"
+    },
+    "Scope": {
+      "pattern": "^(session\\.read|session\\.control|agent\\.read|agent\\.send:.+|config\\.write|admin)$",
+      "type": "string"
+    },
+    "ServerMessage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Event"
+        },
+        {
+          "$ref": "#/$defs/Response"
+        }
+      ],
+      "description": "Anything the service writes on a connection."
+    },
+    "Session": {
+      "description": "A keep-awake session as clients see it.",
+      "properties": {
+        "ends_at": {
+          "description": "Clients draw the countdown from this; the service never sends ticks.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lid_closed_awake": {
+          "default": false,
+          "type": "boolean"
+        },
+        "started_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/SessionState"
+        }
+      },
+      "required": [
+        "id",
+        "started_at",
+        "ends_at",
+        "state"
+      ],
+      "type": "object"
+    },
+    "SessionExtendParams": {
+      "properties": {
+        "duration": {
+          "$ref": "#/$defs/HumanDuration"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "type": "object"
+    },
+    "SessionResult": {
+      "description": "Result of every `session.*` method.",
+      "properties": {
+        "session": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Session"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SessionStartParams": {
+      "properties": {
+        "duration": {
+          "$ref": "#/$defs/HumanDuration"
+        },
+        "lid_closed_awake": {
+          "default": false,
+          "description": "Keep the machine awake with the lid closed too. Not supported before v0.2.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "duration"
+      ],
+      "type": "object"
+    },
+    "SessionState": {
+      "oneOf": [
+        {
+          "enum": [
+            "Active",
+            "Ended"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "Ending",
+          "description": "Undo steps are running.",
+          "type": "string"
+        },
+        {
+          "const": "NeedsAttention",
+          "description": "An undo step failed. `session.stop` retries it.",
+          "type": "string"
+        }
+      ]
+    },
+    "SubscribeParams": {
+      "properties": {
+        "filter": {
+          "default": [],
+          "description": "Event kinds to receive. Empty means every kind.",
+          "items": {
+            "$ref": "#/$defs/EventKind"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/Request"
+    },
+    {
+      "$ref": "#/$defs/ServerMessage"
+    }
+  ],
+  "description": "Everything that can appear on a connection, in either direction. Only used to generate the\nschema.",
+  "title": "Vigilia protocol",
+  "x-protocol-version": 1
+}

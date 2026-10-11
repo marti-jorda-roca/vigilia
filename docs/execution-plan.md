@@ -1,6 +1,6 @@
 # Vigilia: execution plan
 
-This is the build order for the architecture in [`plan.md`](plan.md). Each step ends with a release you can install and use. Each step adds to the previous one without rewriting it.
+This is the build order for the architecture in [`architecture-plan.md`](architecture-plan.md). Each step ends with a release you can install and use. Each step adds to the previous one without rewriting it.
 
 ## Rules for every step
 
@@ -10,7 +10,7 @@ This is the build order for the architecture in [`plan.md`](plan.md). Each step 
 - **Protocol changes only add things.** New methods, events and optional fields are allowed. Removing or renaming anything requires a version bump. The JSON Schema check in CI enforces this.
 - **New features sit behind a capability, a config flag or a build feature.** That way they can be shipped off by default and turned on once proven.
 - **Every action that changes the OS goes through the journal.** No exceptions, including during prototyping.
-- **Meeting the energy budget is part of "done".** Each step meets the budgets in [`plan.md` → Energy efficiency](plan.md#energy-efficiency-design-rule) and records the measured numbers in `docs/energy.md`. Two rules apply everywhere: react to OS events instead of polling, and never send periodic ticks.
+- **Meeting the energy budget is part of "done".** Each step meets the budgets in [`architecture-plan.md` → Energy efficiency](architecture-plan.md#energy-efficiency-design-rule) and records the measured numbers in `docs/energy.md`. Two rules apply everywhere: react to OS events instead of polling, and never send periodic ticks.
 
 ## Overview
 
@@ -337,9 +337,9 @@ Each item is independent, behind a config flag, and can ship in any order:
 - **Linux cgroup freezer** instead of SIGSTOP.
 - **Docker idle rule.**
 
-## How steps map to `plan.md` milestones
+## How steps map to `architecture-plan.md` milestones
 
-| Step | `plan.md` milestone |
+| Step | `architecture-plan.md` milestone |
 |---|---|
 | 1 | M0, M1, M2 (macOS only) |
 | 2 | M3 (macOS) + the battery and heat parts of M4 |
@@ -352,6 +352,6 @@ Each item is independent, behind a config flag, and can ship in any order:
 | 9 | M7 |
 | 10 | M10 + the remaining extras |
 
-Order changes compared with `plan.md`, made so the main goal (talk to agents while the lid is closed) arrives sooner:
+Order changes compared with `architecture-plan.md`, made so the main goal (talk to agents while the lid is closed) arrives sooner:
 - The macOS UI, agents and remote access come before lid actions and before the other OSes.
 - Step 5 adds an embedded phone web client and ntfy push notifications. They are the smallest way to make remote access usable from a phone without building an iOS app.

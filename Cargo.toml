@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT"
+repository = "https://github.com/marti-jorda-roca/vigilia"
+
+[workspace.dependencies]
+vigilia-protocol = { path = "crates/protocol" }
+vigilia-core = { path = "crates/core" }
+vigilia-platform = { path = "crates/platform" }
+vigilia-daemon = { path = "crates/daemon" }
+
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+clap = { version = "4.6", features = ["derive"] }
+core-foundation = "0.10"
+directories = "6"
+fs4 = { version = "1.1", features = ["sync"] }
+libc = "0.2"
+schemars = { version = "1.2", features = ["chrono04"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1.53", default-features = false, features = ["rt", "net", "io-util", "sync", "macros", "time", "signal"] }
+toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "std"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+proptest = "1.12"
+tempfile = "3"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+
+[profile.release]
+lto = true
+opt-level = "s"
+codegen-units = 1
+panic = "abort"
+strip = true
