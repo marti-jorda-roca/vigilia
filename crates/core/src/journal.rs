@@ -22,6 +22,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum ActionKind {
     KeepAwake,
+    /// The OS-scheduled `vigilia recover` job that exists only during a session.
+    Backstop,
 }
 
 /// The state needed to undo one action. Later steps add variants.
@@ -31,6 +33,15 @@ pub enum UndoRecord {
     /// An `IOKit` `PreventUserIdleSystemSleep` assertion. The OS releases it when the owning
     /// process exits, so after a crash there is nothing left to undo.
     IdleSleepAssertion { pid: u32, assertion_id: u32 },
+    /// An idle-sleep assertion plus `pmset disablesleep`, for lid-closed sessions. The
+    /// assertion dies with its process; `sleep_was_disabled` is the value to restore.
+    LidClosedAwake {
+        pid: u32,
+        assertion_id: u32,
+        sleep_was_disabled: bool,
+    },
+    /// The backstop LaunchAgent/systemd job registered for a session.
+    Backstop { label: String, plist: String },
     /// A backend that holds no OS state (tests, stubs).
     Noop,
 }
@@ -308,8 +319,9 @@ mod tests {
 
     fn id_of(rec: &UndoRecord) -> u32 {
         match rec {
-            UndoRecord::IdleSleepAssertion { assertion_id, .. } => *assertion_id,
-            UndoRecord::Noop => 0,
+            UndoRecord::IdleSleepAssertion { assertion_id, .. }
+            | UndoRecord::LidClosedAwake { assertion_id, .. } => *assertion_id,
+            UndoRecord::Backstop { .. } | UndoRecord::Noop => 0,
         }
     }
 

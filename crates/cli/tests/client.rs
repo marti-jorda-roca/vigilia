@@ -276,3 +276,20 @@ fn json_watch_prints_one_line_per_change() {
         ]
     );
 }
+
+#[test]
+fn lid_closed_session() {
+    let server = TestServer::start();
+    let mut c = server.client();
+    let started = commands::start_lid(&mut c, Some(dur("1h")), true)
+        .unwrap()
+        .unwrap();
+    assert!(started.lid_closed_awake);
+    assert!(server.platform.sleep_disabled());
+    assert!(server.platform.backstop_registered());
+    commands::simulate_lid(&mut c, vigilia_protocol::LidState::Closed).unwrap();
+    let stopped = commands::stop(&mut c).unwrap().unwrap();
+    assert_eq!(stopped.state, SessionState::Ended);
+    assert!(!server.platform.sleep_disabled());
+    assert!(!server.platform.backstop_registered());
+}

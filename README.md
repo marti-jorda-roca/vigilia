@@ -10,6 +10,7 @@ vigilia extend 30m           # add 30 minutes to the running session
 vigilia stop                 # end it now and let the Mac sleep again
 
 vigilia start 3h --extend    # in scripts and agents: start a session, or make the running one last at least 3h
+vigilia start 4h --lid       # also stay awake with the lid closed (needs `vigilia install` first)
 vigilia status --json        # the session as JSON, for scripts
 ```
 For more details, see the [CLI documentation](docs/cli.md).
@@ -26,13 +27,15 @@ cargo install --path crates/cli --locked
 
 This puts a single `vigilia` binary in `~/.cargo/bin`. Make sure that directory is on your `PATH`.
 
+For lid-closed sessions, run `vigilia install` once: it shows a narrow sudoers rule (only `pmset disablesleep 1/0`) and asks before installing it, along with the socket-activated service LaunchAgent and a run-once-at-login `vigilia recover` job. `vigilia uninstall` removes them.
+
 ## Layout
 
 | Crate | What it holds |
 |---|---|
 | `crates/protocol` | Wire types (requests, responses, events), `ClientContext` and scopes, the generated JSON Schema |
-| `crates/core` | Session state machine, recovery journal, config, paths. No OS code |
-| `crates/platform` | `Platform` trait and `Capabilities`; macOS backend (idle-sleep assertion, GCD deadline timer), stubs for Linux and Windows, `FakePlatform` for tests |
+| `crates/core` | Session state machine, recovery journal, battery/heat rules, config, paths. No OS code |
+| `crates/platform` | `Platform` trait and `Capabilities`; macOS backend (idle-sleep assertion, `pmset disablesleep`, IOKit lid/power events, launchd backstop, GCD deadline timer), stubs for Linux and Windows, `FakePlatform` for tests |
 | `crates/daemon` | The service: dispatch with scope checks, event bus, owner-only Unix socket, instance lock, launchd socket activation, idle exit |
 | `crates/cli` | The `vigilia` binary: client commands that start the service when it isn't running, and `vigilia daemon`, the service itself |
 

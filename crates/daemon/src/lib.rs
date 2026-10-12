@@ -11,9 +11,13 @@
 
 pub mod bus;
 pub mod dispatch;
+pub mod install;
 pub mod lock;
+pub mod recover;
 pub mod service;
 pub mod transports;
+
+pub use recover::{RecoverOutcome, recover_blocking};
 
 #[cfg(unix)]
 mod activation;
@@ -137,10 +141,15 @@ fn init_logging(
         .level
         .parse()
         .unwrap_or_else(|_| Targets::new().with_default(tracing::Level::INFO));
-    let (file, guard) = tracing_appender::non_blocking(tracing_appender::rolling::never(
-        &paths.log_dir,
-        "vigilia.log",
-    ));
+    // A small line buffer: the default (128k lines) pre-allocates ~4 MB in the channel,
+    // which alone would break the daemon's 10 MB memory budget. Logging is lossy beyond
+    // this; the journal, not the log, is the record that matters.
+    let (file, guard) = tracing_appender::non_blocking::NonBlockingBuilder::default()
+        .buffered_lines_limit(512)
+        .finish(tracing_appender::rolling::never(
+            &paths.log_dir,
+            "vigilia.log",
+        ));
     let writer = if std::io::stderr().is_terminal() {
         BoxMakeWriter::new(file.and(std::io::stderr))
     } else {

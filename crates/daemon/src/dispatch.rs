@@ -67,6 +67,10 @@ pub fn dispatch(svc: &mut Service, ctx: &ClientContext, req: Request) -> Dispatc
             response: Response::ok(id, &Empty {}),
             subscription: Some(svc.subscribe(&p.filter)),
         },
+        Call::DebugSimulateLid(p) => {
+            svc.simulate_lid(p.state);
+            Response::ok(id, &Empty {}).into()
+        }
     }
 }
 
@@ -90,6 +94,9 @@ mod tests {
             }),
             Call::SessionExtend(SessionExtendParams { duration }),
             Call::SessionStop {},
+            Call::DebugSimulateLid(vigilia_protocol::SimulateLidParams {
+                state: vigilia_protocol::LidState::Closed,
+            }),
         ]
     }
 

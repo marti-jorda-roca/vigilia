@@ -25,12 +25,15 @@ pub mod watch;
 
 use std::process::ExitCode;
 
-pub use args::{Cli, Command};
+pub use args::{Cli, Command, DebugCommand, LidArg};
 pub use error::{CliError, exit};
 
 pub fn run(cli: Cli) -> ExitCode {
     let code = match cli.command {
         Command::Daemon => daemon(),
+        Command::Recover => recover(),
+        Command::Install { yes } => install(yes, false),
+        Command::Uninstall { yes } => install(yes, true),
         command => {
             let plain_start = matches!(command, Command::Start { extend: false, .. });
             client_command(command, cli.json).unwrap_or_else(|e| {
@@ -40,6 +43,96 @@ pub fn run(cli: Cli) -> ExitCode {
         }
     };
     ExitCode::from(code)
+}
+
+/// `vigilia recover` talks to no service: it takes the lock itself, so it works exactly
+/// when the service is dead.
+fn recover() -> u8 {
+    use std::io::Write;
+    match vigilia_daemon::recover_blocking() {
+        Ok(outcome) if outcome.already_running => {
+            let _ = writeln!(
+                std::io::stdout().lock(),
+                "The vigilia service is running and owns the session state; nothing to recover."
+            );
+            0
+        }
+        Ok(outcome) => {
+            let _ = writeln!(
+                std::io::stdout().lock(),
+                "Recovered {} action(s); sleep behaviour is back to normal.",
+                outcome.undone
+            );
+            if outcome.failed > 0 {
+                exit::NEEDS_ATTENTION
+            } else {
+                0
+            }
+        }
+        Err(e) => {
+            let _ = writeln!(std::io::stderr().lock(), "vigilia recover: {e}");
+            exit::UNREACHABLE
+        }
+    }
+}
+
+/// Shows what would be installed and asks, unless `--yes`; then installs or uninstalls.
+fn install(yes: bool, uninstall: bool) -> u8 {
+    use std::io::Write;
+    let mut stdout = std::io::stdout().lock();
+    let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
+    if !uninstall {
+        let _ = writeln!(
+            stdout,
+            "This installs the LaunchAgents and this sudoers rule ({}):\n{}",
+            vigilia_daemon::install::SUDOERS_PATH,
+            vigilia_daemon::install::sudoers_rule(&user)
+        );
+    }
+    if !yes {
+        let _ = write!(
+            stdout,
+            "{}? [y/N] ",
+            if uninstall { "Uninstall" } else { "Install" }
+        );
+        let _ = stdout.flush();
+        let mut line = String::new();
+        if std::io::stdin().read_line(&mut line).is_err()
+            || !matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes")
+        {
+            let _ = writeln!(stdout, "Aborted.");
+            return 0;
+        }
+    }
+    let result = if uninstall {
+        vigilia_daemon::install::uninstall()
+    } else {
+        let paths = match vigilia_core::Paths::for_user() {
+            Ok(paths) => paths,
+            Err(e) => {
+                let _ = writeln!(std::io::stderr().lock(), "vigilia install: {e}");
+                return exit::UNREACHABLE;
+            }
+        };
+        if let Err(e) = paths.create_dirs() {
+            let _ = writeln!(std::io::stderr().lock(), "vigilia install: {e}");
+            return exit::UNREACHABLE;
+        }
+        let program = std::env::current_exe().unwrap_or_else(|_| "vigilia".into());
+        vigilia_daemon::install::install(&program, &user, &paths)
+    };
+    match result {
+        Ok(done) => {
+            for line in done {
+                let _ = writeln!(stdout, "{line}");
+            }
+            0
+        }
+        Err(e) => {
+            let _ = writeln!(std::io::stderr().lock(), "vigilia: {e}");
+            exit::REFUSED
+        }
+    }
 }
 
 fn daemon() -> u8 {
@@ -63,9 +156,16 @@ fn client_command(command: Command, json: bool) -> Result<u8, CliError> {
         Command::Start {
             duration: Some(duration),
             extend: true,
-        } => commands::start_or_extend(&mut client, duration)?,
+            lid,
+        } => commands::start_or_extend_lid(&mut client, duration, lid)?,
         // Without a duration, clap rejects `--extend`.
-        Command::Start { duration, .. } => commands::start(&mut client, duration)?,
+        Command::Start { duration, lid, .. } => commands::start_lid(&mut client, duration, lid)?,
+        Command::Debug {
+            command: DebugCommand::SimulateLid { state },
+        } => {
+            commands::simulate_lid(&mut client, state.into())?;
+            return Ok(0);
+        }
         Command::Extend { duration } => commands::extend(&mut client, duration)?,
         Command::Stop => commands::stop(&mut client)?,
         Command::Status { watch: false } => commands::status(&mut client)?,
@@ -79,7 +179,12 @@ fn client_command(command: Command, json: bool) -> Result<u8, CliError> {
             watch::watch(&mut client, mode, &mut stdout.lock())?;
             return Ok(0);
         }
-        Command::Daemon => unreachable!("handled in run"),
+        Command::Daemon
+        | Command::Recover
+        | Command::Install { .. }
+        | Command::Uninstall { .. } => {
+            unreachable!("handled in run")
+        }
     };
     Ok(output::print_session(session.as_ref(), json))
 }

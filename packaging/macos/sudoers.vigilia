@@ -1,0 +1,3 @@
+# Vigilia: keep the Mac awake with the lid closed (vigilia install)
+# Installed as /etc/sudoers.d/vigilia (mode 0440). __USER__ is replaced at install time.
+__USER__ ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0

@@ -1093,7 +1093,7 @@ dependencies = [
 
 [[package]]
 name = "vigilia-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "clap",
@@ -1110,7 +1110,7 @@ dependencies = [
 
 [[package]]
 name = "vigilia-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "directories",
@@ -1127,7 +1127,7 @@ dependencies = [
 
 [[package]]
 name = "vigilia-daemon"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "libc",
@@ -1146,7 +1146,7 @@ dependencies = [
 
 [[package]]
 name = "vigilia-platform"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "core-foundation",
@@ -1160,7 +1160,7 @@ dependencies = [
 
 [[package]]
 name = "vigilia-protocol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "schemars",
