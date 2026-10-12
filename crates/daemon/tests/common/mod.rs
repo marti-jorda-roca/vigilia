@@ -19,7 +19,7 @@ use vigilia_protocol::{Call, ClientContext, HumanDuration, Request, SessionStart
 pub struct Harness {
     pub handle: ServiceHandle,
     pub platform: FakePlatform,
-    pub fires: Arc<AtomicUsize>,
+    fires: Arc<AtomicUsize>,
     pub task: JoinHandle<Exit>,
     pub dir: tempfile::TempDir,
     shutdown: Option<oneshot::Sender<()>>,

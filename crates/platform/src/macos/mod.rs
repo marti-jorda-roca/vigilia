@@ -11,14 +11,8 @@ use crate::{Capabilities, Platform, PlatformError, Result};
 
 const ASSERTION_NAME: &str = "Vigilia session";
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MacPlatform;
-
-impl MacPlatform {
-    pub fn new() -> Self {
-        Self
-    }
-}
 
 impl Platform for MacPlatform {
     fn capabilities(&self) -> Capabilities {
@@ -75,7 +69,7 @@ mod tests {
 
     #[test]
     fn keep_awake_then_release() {
-        let p = MacPlatform::new();
+        let p = MacPlatform;
         let rec = p.keep_awake(false).unwrap();
         let UndoRecord::IdleSleepAssertion { assertion_id, pid } = rec else {
             panic!("unexpected record {rec:?}")
@@ -90,7 +84,7 @@ mod tests {
     #[test]
     fn lid_closed_is_not_supported_yet() {
         assert!(matches!(
-            MacPlatform::new().keep_awake(true),
+            MacPlatform.keep_awake(true),
             Err(PlatformError::Unsupported(_))
         ));
     }

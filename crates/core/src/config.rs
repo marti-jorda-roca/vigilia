@@ -34,7 +34,7 @@ impl Default for EnergyConfig {
 
 impl EnergyConfig {
     pub fn idle_exit(&self) -> Duration {
-        Duration::from_secs(self.idle_exit_minutes * 60)
+        Duration::from_secs(self.idle_exit_minutes.saturating_mul(60))
     }
 
     pub fn timer_leeway(&self) -> Duration {

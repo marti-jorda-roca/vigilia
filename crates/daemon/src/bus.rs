@@ -3,8 +3,9 @@
 //! Events are only published when something changes.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
-use tokio::sync::{broadcast, watch};
+use tokio::sync::{Notify, broadcast, watch};
 use vigilia_protocol::{Event, EventKind, Session, SessionState};
 
 const CAPACITY: usize = 64;
@@ -14,6 +15,8 @@ pub struct Bus {
     events: broadcast::Sender<Event>,
     /// The latest session, so a new or lagging subscriber can be brought up to date.
     session: watch::Sender<Option<Session>>,
+    /// Woken whenever a [`Subscription`] is dropped.
+    left: Arc<Notify>,
 }
 
 impl Default for Bus {
@@ -27,7 +30,18 @@ impl Bus {
         Self {
             events: broadcast::channel(CAPACITY).0,
             session: watch::channel(None).0,
+            left: Arc::default(),
         }
+    }
+
+    /// Live subscriptions. A subscription counts until it is dropped, however that happens.
+    pub fn subscribers(&self) -> usize {
+        self.events.receiver_count()
+    }
+
+    /// Completes once a subscription has been dropped since the last call.
+    pub async fn subscriber_left(&self) {
+        self.left.notified().await;
     }
 
     pub fn publish(&self, event: Event) {
@@ -49,6 +63,7 @@ impl Bus {
             snapshot: Some(Event::SessionChanged {
                 session: self.session.borrow().clone(),
             }),
+            _left: LeftGuard(self.left.clone()),
         }
     }
 }
@@ -60,6 +75,18 @@ pub struct Subscription {
     filter: HashSet<EventKind>,
     /// Sent before anything else: the session as of subscribing (or of lagging).
     snapshot: Option<Event>,
+    /// Declared after `events` so it drops after it: when the bus is woken, the count is
+    /// already lower.
+    _left: LeftGuard,
+}
+
+#[derive(Debug)]
+struct LeftGuard(Arc<Notify>);
+
+impl Drop for LeftGuard {
+    fn drop(&mut self) {
+        self.0.notify_one();
+    }
 }
 
 impl Subscription {
@@ -123,6 +150,15 @@ mod tests {
         bus.publish(Event::NeedsAttention { detail: "x".into() });
         bus.publish(warning(2));
         assert_eq!(sub.recv().await, Some(warning(2)));
+    }
+
+    #[test]
+    fn dropping_a_subscription_lowers_the_count() {
+        let bus = Bus::new();
+        let sub = bus.subscribe(&[]);
+        assert_eq!(bus.subscribers(), 1);
+        drop(sub);
+        assert_eq!(bus.subscribers(), 0);
     }
 
     #[tokio::test]

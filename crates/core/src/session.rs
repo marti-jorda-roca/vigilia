@@ -134,12 +134,12 @@ impl SessionMachine {
     /// Records the outcome of the undo steps started by [`begin_end`](Self::begin_end).
     /// On success the session is gone and its final `Ended` snapshot is returned.
     pub fn finish_end(&mut self, undo_ok: bool) -> Option<Session> {
-        let live = self.live.as_mut()?;
         if undo_ok {
             let mut session = self.live.take()?.session;
             session.state = SessionState::Ended;
             Some(session)
         } else {
+            let live = self.live.as_mut()?;
             live.session.state = SessionState::NeedsAttention;
             Some(live.session.clone())
         }
@@ -195,13 +195,43 @@ fn check_duration(duration: Duration) -> Result<(), SessionError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::clock::{Clock, ManualClock};
     use chrono::TimeDelta;
+    use std::cell::Cell;
 
     const MIN: Duration = Duration::from_secs(60);
 
+    /// A clock moved by hand.
+    struct ManualClock(Cell<Now>);
+
+    impl ManualClock {
+        fn now(&self) -> Now {
+            self.0.get()
+        }
+
+        /// Moves both clocks forward, as real time passing does.
+        fn advance(&self, by: Duration) {
+            let Now { wall, mono } = self.now();
+            self.0.set(Now {
+                wall: wall + by,
+                mono: mono + by,
+            });
+        }
+
+        /// Moves only the wall clock, as a user or NTP changing the system time does.
+        fn jump_wall(&self, by: TimeDelta) {
+            let now = self.now();
+            self.0.set(Now {
+                wall: now.wall + by,
+                ..now
+            });
+        }
+    }
+
     fn clock() -> ManualClock {
-        ManualClock::new("2026-10-12T00:00:00Z".parse().unwrap())
+        ManualClock(Cell::new(Now {
+            wall: "2026-10-12T00:00:00Z".parse().unwrap(),
+            mono: Instant::now(),
+        }))
     }
 
     #[test]

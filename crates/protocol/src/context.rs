@@ -127,12 +127,8 @@ impl ScopeSet {
         Scope::all().into_iter().collect()
     }
 
-    /// `None` means the action needs no scope.
-    pub fn covers(&self, required: Option<&Scope>) -> bool {
-        match required {
-            None => true,
-            Some(required) => self.0.iter().any(|held| held.covers(required)),
-        }
+    pub fn covers(&self, required: &Scope) -> bool {
+        self.0.iter().any(|held| held.covers(required))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Scope> {
@@ -201,11 +197,10 @@ mod tests {
     #[test]
     fn local_context_covers_everything() {
         let ctx = ClientContext::local();
-        assert!(ctx.scopes.covers(Some(&Scope::SessionControl)));
-        assert!(ctx.scopes.covers(Some(&Scope::AgentSend("x".into()))));
+        assert!(ctx.scopes.covers(&Scope::SessionControl));
+        assert!(ctx.scopes.covers(&Scope::AgentSend("x".into())));
         let remote = ClientContext::remote("phone", [Scope::SessionRead]);
-        assert!(remote.scopes.covers(None));
-        assert!(remote.scopes.covers(Some(&Scope::SessionRead)));
-        assert!(!remote.scopes.covers(Some(&Scope::SessionControl)));
+        assert!(remote.scopes.covers(&Scope::SessionRead));
+        assert!(!remote.scopes.covers(&Scope::SessionControl));
     }
 }

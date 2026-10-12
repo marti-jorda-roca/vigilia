@@ -51,7 +51,7 @@ pub trait Platform: Send + Sync {
 /// The backend for the OS this binary was built for.
 pub fn native() -> Arc<dyn Platform> {
     #[cfg(target_os = "macos")]
-    return Arc::new(macos::MacPlatform::new());
+    return Arc::new(macos::MacPlatform);
     #[cfg(not(target_os = "macos"))]
     return Arc::new(stub::StubPlatform);
 }
