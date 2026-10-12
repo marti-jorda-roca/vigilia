@@ -13,8 +13,8 @@ use vigilia_core::{
 };
 use vigilia_platform::{Capabilities, DeadlineTimer, Platform, PlatformError, TimerFired};
 use vigilia_protocol::{
-    ClientContext, ErrorBody, ErrorCode, Event, EventKind, HelloResult, PROTOCOL_VERSION, Request,
-    Session, SessionExtendParams, SessionStartParams,
+    ClientContext, ErrorBody, ErrorCode, Event, EventKind, HelloResult, HumanDuration,
+    PROTOCOL_VERSION, Request, Session, SessionExtendParams, SessionStartParams,
 };
 
 use crate::bus::{Bus, Subscription};
@@ -201,7 +201,11 @@ impl Service {
         let now = self.clock.now();
         let session = self
             .machine
-            .start(now, p.duration.as_duration(), p.lid_closed_awake)
+            .start(
+                now,
+                p.duration.map(HumanDuration::as_duration),
+                p.lid_closed_awake,
+            )
             .map_err(session_error)?;
         let platform = &self.platform;
         match self.journal.apply(ActionKind::KeepAwake, None, || {
@@ -214,7 +218,7 @@ impl Service {
                 return Err(action_error(e));
             }
         }
-        tracing::info!(id = %session.id, ends_at = %session.ends_at, "session started");
+        tracing::info!(id = %session.id, ends_at = ?session.ends_at, "session started");
         self.publish_session(Some(session.clone()));
         Ok(session)
     }
@@ -224,7 +228,7 @@ impl Service {
             .machine
             .extend(self.clock.now(), p.duration.as_duration())
             .map_err(session_error)?;
-        tracing::info!(ends_at = %session.ends_at, "session extended");
+        tracing::info!(ends_at = ?session.ends_at, "session extended");
         self.publish_session(Some(session.clone()));
         Ok(session)
     }

@@ -88,7 +88,7 @@ mod tests {
             Call::SessionStatus {},
             Call::Subscribe(SubscribeParams::default()),
             Call::SessionStart(SessionStartParams {
-                duration,
+                duration: Some(duration),
                 lid_closed_awake: false,
             }),
             Call::SessionExtend(SessionExtendParams { duration }),
@@ -107,7 +107,7 @@ mod tests {
         let start = Request::new(
             1,
             Call::SessionStart(SessionStartParams {
-                duration: HumanDuration::from_secs(120),
+                duration: Some(HumanDuration::from_secs(120)),
                 lid_closed_awake: false,
             }),
         );

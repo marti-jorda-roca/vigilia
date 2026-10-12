@@ -2,6 +2,18 @@
 
 Keep your laptop awake for a set time, from the terminal or from a coding agent, and pay almost nothing in battery for it.
 
+```sh
+vigilia start 2h             # keep the Mac awake for 2 hours
+vigilia start                # keep it awake until `vigilia stop`
+vigilia status --watch       # live countdown; Ctrl-C to quit
+vigilia extend 30m           # add 30 minutes to the running session
+vigilia stop                 # end it now and let the Mac sleep again
+
+vigilia start 3h --extend    # in scripts and agents: start a session, or make the running one last at least 3h
+vigilia status --json        # the session as JSON, for scripts
+```
+For more details, see the [CLI documentation](docs/cli.md).
+
 ## Install
 
 There are no prebuilt binaries yet, so for now you build the CLI from source. It needs macOS and [rustup](https://rustup.rs). The Rust version is pinned in `rust-toolchain.toml`, and rustup installs it the first time you build.
@@ -12,18 +24,7 @@ cd vigilia
 cargo install --path crates/cli --locked
 ```
 
-This puts a single `vigilia` binary in `~/.cargo/bin`. Make sure that directory is on your `PATH`, then check it works:
-
-```sh
-vigilia start 2m
-vigilia status --watch
-```
-
-You don't need to start the service yourself. `vigilia daemon` is the service, and client commands start it when it isn't running. It exits on its own after 5 idle minutes with no session.
-
-For every command, durations, `--json` output, config and errors, see the [CLI documentation](docs/cli.md).
-
-The `crates/cli` crate is still being written as part of v0.1, so the commands above will work once it lands. A `vigilia install` command (LaunchAgent with socket activation) comes in v0.2, and a signed `.app` comes later.
+This puts a single `vigilia` binary in `~/.cargo/bin`. Make sure that directory is on your `PATH`.
 
 ## Layout
 
@@ -33,6 +34,7 @@ The `crates/cli` crate is still being written as part of v0.1, so the commands a
 | `crates/core` | Session state machine, recovery journal, config, paths. No OS code |
 | `crates/platform` | `Platform` trait and `Capabilities`; macOS backend (idle-sleep assertion, GCD deadline timer), stubs for Linux and Windows, `FakePlatform` for tests |
 | `crates/daemon` | The service: dispatch with scope checks, event bus, owner-only Unix socket, instance lock, launchd socket activation, idle exit |
+| `crates/cli` | The `vigilia` binary: client commands that start the service when it isn't running, and `vigilia daemon`, the service itself |
 
 ## Development
 

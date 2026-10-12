@@ -1,0 +1,29 @@
+[package]
+name = "vigilia-cli"
+description = "The vigilia command: a client for the service, and the service itself"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "vigilia"
+path = "src/main.rs"
+
+[dependencies]
+vigilia-core.workspace = true
+vigilia-daemon.workspace = true
+vigilia-protocol.workspace = true
+chrono.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+vigilia-platform.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

@@ -2,12 +2,11 @@
 
 How to use the `vigilia` command. To install it, see [Install](../README.md#install).
 
-> The CLI crate (`crates/cli`) is being written as part of v0.1. This page documents the v0.1 commands from the [execution plan](execution-plan.md) and the behaviour the service already has. Commands planned for later releases are listed at the end.
-
 ## Quick start
 
 ```sh
 vigilia start 2h        # keep the Mac awake for 2 hours
+vigilia start           # keep it awake until `vigilia stop`
 vigilia status --watch  # live countdown; Ctrl-C to quit
 vigilia extend 30m      # add 30 minutes
 vigilia stop            # end the session now
@@ -17,7 +16,7 @@ While a session runs, the Mac doesn't idle-sleep. The display can still turn off
 
 ## Durations
 
-`start` and `extend` take a duration written as one or more `<number><unit>` groups:
+`extend`, and `start` when given one, take a duration written as one or more `<number><unit>` groups:
 
 | Unit | Meaning |
 |---|---|
@@ -28,30 +27,51 @@ While a session runs, the Mac doesn't idle-sleep. The display can still turn off
 
 Examples: `90s`, `45m`, `2h`, `1h30m`, `1d2h`. Units are case-insensitive. A bare number such as `30` is rejected, because the unit would be a guess.
 
-A duration can't be zero, and a session can't run longer than 30 days.
+A duration can't be zero, and a session with a duration can't run longer than 30 days. For longer, start one without a duration (see below).
 
 ## Commands
 
-### `vigilia start <duration>`
+### `vigilia start [<duration>] [--extend]`
 
-Starts a session that ends after `<duration>`. Only one session can run at a time, so this fails if one is already running. Use `extend` to add time, or `stop` and then `start` to begin a new one.
+Starts a session that ends after `<duration>`. Only one session can run at a time, so this fails with `session_active` if one is already running.
+
+Without a duration, the session has no end: it runs until `vigilia stop`, and the 30-day limit doesn't apply. `status` shows how long it has been running instead of a countdown.
+
+With `--extend`, it makes sure a session runs for at least `<duration>` from now:
+
+- If no session is running, it starts one.
+- If the running session ends too soon, it extends that session so it ends `<duration>` from now (to the second).
+- If the session already lasts that long, nothing changes.
+
+`--extend` is the one call a script or an agent needs. It doesn't have to check first whether a session is running. It needs a duration; a session without an end already lasts long enough, so `--extend` leaves it as it is.
 
 ### `vigilia extend <duration>`
 
-Adds `<duration>` to the running session's remaining time. `vigilia extend 30m` on a session with 10 minutes left leaves 40 minutes. This fails if no session is running, or if the total remaining time would be over 30 days.
+Adds `<duration>` to the running session's remaining time. `vigilia extend 30m` on a session with 10 minutes left leaves 40 minutes. This fails if no session is running, or if the total remaining time would be over 30 days. A session without an end stays as it is, and the command still succeeds.
 
 ### `vigilia stop`
 
-Ends the session now and lets the Mac sleep normally again.
+Ends the session now and lets the Mac sleep normally again. If no session is running, it prints `No session running` and still succeeds, so a cleanup step doesn't fail because the session already ran out.
 
 If undoing a session's changes ever fails, the session stays in the `NeedsAttention` state and the Mac may not sleep normally. Running `vigilia stop` again retries the undo.
 
-### `vigilia status [--json] [--watch]`
+### `vigilia status [--watch]`
 
-Shows the current session, or that there is none.
+Shows the current session, or that there is none. It exits with code 4 if the session needs attention.
 
-- `--watch` keeps running and redraws the countdown until you press Ctrl-C. The countdown is computed locally from the session's end time. The service only sends a message when something changes (start, extend, stop, end), so watching costs almost nothing.
-- `--json` prints the session as JSON, in the same shape the [protocol](../crates/protocol/schema/protocol.schema.json) uses. Scripts and agents should use this rather than parse the human output.
+`--watch` keeps running until you press Ctrl-C. The service only sends a message when something changes (start, extend, stop, end), so watching costs almost nothing. What it prints depends on where the output goes:
+
+- **In a terminal**, one line with a countdown, redrawn in place. The countdown is computed locally from the session's end time. It redraws once a second in the last hour, and once a minute before that. A session without an end shows the time since it started instead, redrawn once a second in its first hour and once a minute after that.
+- **In a pipe or a file**, one line each time the session changes.
+- **With `--json`**, one `{"session": …}` line each time the session changes (NDJSON).
+
+### `vigilia daemon`
+
+Runs the service in the foreground and logs to the terminal. You don't normally run this yourself (see below). It is useful when debugging.
+
+## JSON output
+
+`--json` works with every command except `daemon`, before or after the command name (`vigilia --json stop` or `vigilia stop --json`). `start`, `extend`, `stop` and `status` all print the session in the same shape the [protocol](../crates/protocol/schema/protocol.schema.json) uses. Scripts and agents should use this rather than parse the human output.
 
 A session in `--json` output looks like this (`session` is `null` when nothing is running):
 
@@ -67,23 +87,33 @@ A session in `--json` output looks like this (`session` is `null` when nothing i
 }
 ```
 
-`state` is one of `Active`, `Ending`, `Ended` or `NeedsAttention`. Times are UTC, in RFC 3339 format.
+`ends_at` is `null` for a session without an end. `state` is one of `Active`, `Ending`, `Ended` or `NeedsAttention`. `stop` returns the session it ended, in state `Ended`. Times are UTC, in RFC 3339 format.
 
-### `vigilia daemon`
+With `--json`, errors go to stderr as `{"error":{"code":"no_session","message":"no session is running"}}`. The codes are listed under [Errors](#errors).
 
-Runs the service in the foreground and logs to the terminal. You don't normally run this yourself (see below). It is useful when debugging.
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Done |
+| `1` | The service refused the command; the error code says why |
+| `2` | Usage error, such as an unknown command or a bad duration |
+| `3` | The service couldn't be reached or started (code `unreachable`) |
+| `4` | The session needs attention: undoing its changes failed, so the Mac may not sleep normally. Run `vigilia stop` to retry |
 
 ## Using it from a coding agent
 
 An agent can call `vigilia start` before a long task, with no setup step, and `vigilia stop` when it's done:
 
 ```sh
-vigilia start 3h
+vigilia start 3h --extend
 # … long-running work …
 vigilia stop
 ```
 
-If the agent might find a session already running, it can check first with `vigilia status --json`, then call `extend` instead of `start`.
+`--extend` makes the call safe when a session is already running: it never shortens that session, and only lengthens it when needed. `stop` succeeds even when the session already ended.
+
+Prefer a duration over a plain `vigilia start` here. A session without an end lasts until something runs `vigilia stop`, so an agent that crashes or forgets to stop keeps the Mac awake indefinitely, while a timed session still ends on its own.
 
 ## The service
 
@@ -123,17 +153,18 @@ level = "info"          # a tracing filter, e.g. "debug" or "vigilia_daemon=debu
 
 ## Errors
 
-When the service refuses a command, it returns an error code, which the CLI shows along with the message.
+When the service refuses a command, it returns an error code. The CLI prints the message followed by the code, for example `vigilia: no session is running (no_session)`, and exits with code 1.
 
 | Code | When |
 |---|---|
 | `session_active` | `start` while a session is already running (or ending, or needs attention) |
-| `no_session` | `extend` or `stop` with no session running |
+| `no_session` | `extend` with no session running |
 | `bad_request` | Invalid input, such as a zero duration or one over 30 days |
 | `unsupported` | The feature isn't available on this OS or machine |
 | `forbidden` | The client lacks permission. Local commands have every permission, so you only see this from remote clients (later) |
 | `unsupported_version` | The CLI and the service speak different protocol versions; reinstall so both match |
 | `internal` | A bug in the service; check `logs/vigilia.log` |
+| `unreachable` | Set by the CLI, not the service: it couldn't connect to the service or start it (exit code 3) |
 
 ## Planned commands
 
