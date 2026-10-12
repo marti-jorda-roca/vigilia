@@ -1,0 +1,49 @@
+//! The Vigilia wire protocol.
+//!
+//! One JSON object per line, in both directions. Clients send [`Request`]s; the service answers
+//! each with a [`Response`] carrying the same `id`, and pushes [`Event`]s to subscribers. The same
+//! messages travel unchanged over every transport.
+//!
+//! Compatibility rule: within a protocol version, changes only add things (methods, events,
+//! optional fields). `schema/protocol.schema.json` is generated from these types and CI fails
+//! when it is out of date.
+
+mod context;
+mod duration;
+mod event;
+mod request;
+mod response;
+
+pub use context::{ClientContext, Origin, Scope, ScopeParseError, ScopeSet};
+pub use duration::{DurationParseError, HumanDuration};
+pub use event::{Event, EventKind};
+pub use request::{
+    Call, Request, RequestParseError, SessionExtendParams, SessionStartParams, SubscribeParams,
+};
+pub use response::{
+    CallResult, Capabilities, Empty, ErrorBody, ErrorCode, HelloResult, Response, ServerMessage,
+    Session, SessionResult, SessionState,
+};
+
+/// The protocol version this build speaks. Bumped only for incompatible changes.
+pub const PROTOCOL_VERSION: u32 = 1;
+
+/// Everything that can appear on a connection, in either direction. Only used to generate the
+/// schema.
+#[derive(schemars::JsonSchema)]
+#[serde(untagged)]
+#[allow(dead_code)]
+enum WireMessage {
+    Request(Request),
+    ServerMessage(ServerMessage),
+}
+
+/// The JSON Schema for the protocol, as checked in at `schema/protocol.schema.json`.
+pub fn schema() -> serde_json::Value {
+    let mut schema = schemars::schema_for!(WireMessage).to_value();
+    if let Some(obj) = schema.as_object_mut() {
+        obj.insert("title".into(), "Vigilia protocol".into());
+        obj.insert("x-protocol-version".into(), PROTOCOL_VERSION.into());
+    }
+    schema
+}
