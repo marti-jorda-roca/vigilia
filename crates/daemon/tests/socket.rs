@@ -2,6 +2,7 @@
 #![cfg(unix)]
 
 use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -20,7 +21,7 @@ struct Client {
 }
 
 impl Client {
-    async fn connect(path: &std::path::Path) -> Self {
+    async fn connect(path: &Path) -> Self {
         let (read, write) = UnixStream::connect(path).await.unwrap().into_split();
         Self {
             lines: BufReader::new(read).lines(),
@@ -57,6 +58,27 @@ impl Client {
     }
 }
 
+/// Serves a service on `platform` at a fresh socket in `dir`, and returns the socket path.
+fn serve(dir: &Path, platform: FakePlatform) -> PathBuf {
+    let socket = dir.join("vigilia.sock");
+    let listener = local::bind(&socket).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let listener = tokio::net::UnixListener::from_std(listener).unwrap();
+    let (timer, fired) = TokioTimer::new(Arc::new(SystemClock));
+    let service = Service::start(Deps {
+        platform: Arc::new(platform),
+        clock: Arc::new(SystemClock),
+        timer: Box::new(timer),
+        config: Config::default(),
+        journal: Journal::open(dir.join("journal.jsonl")).unwrap(),
+        socket_activated: false,
+    });
+    let (handle, rx) = ServiceHandle::channel();
+    tokio::spawn(local::serve(listener, handle));
+    tokio::spawn(service.run(rx, fired, std::future::pending()));
+    socket
+}
+
 fn state(event: Option<Event>) -> Option<SessionState> {
     match event {
         Some(Event::SessionChanged { session }) => session.map(|s| s.state),
@@ -67,28 +89,12 @@ fn state(event: Option<Event>) -> Option<SessionState> {
 #[tokio::test]
 async fn session_over_the_socket_with_a_watcher() {
     let dir = tempfile::tempdir().unwrap();
-    let socket = dir.path().join("vigilia.sock");
-    let listener = local::bind(&socket).unwrap();
+    let platform = FakePlatform::new();
+    let socket = serve(dir.path(), platform.clone());
     assert_eq!(
         std::fs::metadata(&socket).unwrap().permissions().mode() & 0o777,
         0o600
     );
-    listener.set_nonblocking(true).unwrap();
-    let listener = tokio::net::UnixListener::from_std(listener).unwrap();
-
-    let platform = FakePlatform::new();
-    let (timer, fired) = TokioTimer::new(Arc::new(SystemClock));
-    let service = Service::start(Deps {
-        platform: Arc::new(platform.clone()),
-        clock: Arc::new(SystemClock),
-        timer: Box::new(timer),
-        config: Config::default(),
-        journal: Journal::open(dir.path().join("journal.jsonl")).unwrap(),
-        socket_activated: false,
-    });
-    let (handle, rx) = ServiceHandle::channel();
-    tokio::spawn(local::serve(listener, handle));
-    tokio::spawn(service.run(rx, fired, std::future::pending()));
 
     // A watcher subscribes and gets the current state (no session).
     let mut watcher = Client::connect(&socket).await;
@@ -140,22 +146,7 @@ async fn session_over_the_socket_with_a_watcher() {
 #[tokio::test]
 async fn malformed_requests_get_bad_request() {
     let dir = tempfile::tempdir().unwrap();
-    let socket = dir.path().join("vigilia.sock");
-    let listener = local::bind(&socket).unwrap();
-    listener.set_nonblocking(true).unwrap();
-    let listener = tokio::net::UnixListener::from_std(listener).unwrap();
-    let (timer, fired) = TokioTimer::new(Arc::new(SystemClock));
-    let service = Service::start(Deps {
-        platform: Arc::new(FakePlatform::new()),
-        clock: Arc::new(SystemClock),
-        timer: Box::new(timer),
-        config: Config::default(),
-        journal: Journal::open(dir.path().join("journal.jsonl")).unwrap(),
-        socket_activated: false,
-    });
-    let (handle, rx) = ServiceHandle::channel();
-    tokio::spawn(local::serve(listener, handle));
-    tokio::spawn(service.run(rx, fired, std::future::pending()));
+    let socket = serve(dir.path(), FakePlatform::new());
 
     let mut c = Client::connect(&socket).await;
     c.send("not json").await;

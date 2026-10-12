@@ -30,12 +30,6 @@ impl HumanDuration {
     }
 }
 
-impl From<HumanDuration> for Duration {
-    fn from(d: HumanDuration) -> Self {
-        d.0
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DurationParseError {
     #[error("duration is empty")]

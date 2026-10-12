@@ -5,6 +5,7 @@ use std::io;
 use std::ops::ControlFlow;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
+use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
@@ -40,7 +41,9 @@ pub async fn serve(listener: UnixListener, service: ServiceHandle) {
         let stream = match listener.accept().await {
             Ok((stream, _)) => stream,
             Err(error) => {
+                // Errors such as running out of file descriptors persist; don't spin on them.
                 tracing::warn!(%error, "accept failed");
+                tokio::time::sleep(Duration::from_millis(100)).await;
                 continue;
             }
         };
@@ -75,11 +78,16 @@ async fn handle(stream: UnixStream, service: ServiceHandle) {
             break;
         };
         if let Some(sub) = subscription {
-            stop_forwarding(forward.take(), &service).await;
-            forward = Some(tokio::spawn(forward_events(sub, out.clone())));
+            // A new subscription replaces the previous one.
+            let task = tokio::spawn(forward_events(sub, out.clone()));
+            if let Some(previous) = forward.replace(task) {
+                previous.abort();
+            }
         }
     }
-    stop_forwarding(forward, &service).await;
+    if let Some(task) = forward {
+        task.abort();
+    }
     drop(out);
     let _ = writer.await;
 }
@@ -144,18 +152,8 @@ async fn forward_events(mut sub: Subscription, out: mpsc::Sender<String>) {
     }
 }
 
-async fn stop_forwarding(task: Option<JoinHandle<()>>, service: &ServiceHandle) {
-    if let Some(task) = task {
-        task.abort();
-        service.subscriber_gone().await;
-    }
-}
-
 fn encode<T: serde::Serialize>(msg: &T) -> String {
-    let mut line = serde_json::to_string(msg).unwrap_or_else(|e| {
-        serde_json::to_string(&Response::err(None, ErrorCode::Internal, e.to_string()))
-            .expect("error responses serialize")
-    });
+    let mut line = serde_json::to_string(msg).expect("protocol messages always serialize");
     line.push('\n');
     line
 }

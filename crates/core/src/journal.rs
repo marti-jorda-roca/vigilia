@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -87,7 +87,6 @@ pub struct ReplayReport {
 
 #[derive(Debug)]
 pub struct Journal {
-    path: PathBuf,
     file: File,
     next_seq: u64,
     open: BTreeMap<ActionId, PendingAction>,
@@ -97,7 +96,6 @@ impl Journal {
     /// Opens or creates the journal and reads every entry. A torn last line (a crash during a
     /// write) is dropped and cut from the file.
     pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
-        let path = path.as_ref().to_path_buf();
         // Plain write access rather than append mode: Windows refuses `set_len` on append-only
         // handles. We are the only writer, so writing at the end we track is equivalent.
         let mut file = OpenOptions::new()
@@ -105,12 +103,11 @@ impl Journal {
             .write(true)
             .create(true)
             .truncate(false)
-            .open(&path)?;
+            .open(path)?;
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)?;
 
         let mut journal = Self {
-            path,
             file,
             next_seq: 1,
             open: BTreeMap::new(),
@@ -139,10 +136,6 @@ impl Journal {
         }
         journal.file.seek(SeekFrom::Start(good_len as u64))?;
         Ok(journal)
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
     }
 
     /// Actions that were started and not closed, oldest first.
@@ -352,7 +345,8 @@ mod tests {
     #[test]
     fn failed_apply_closes_the_action_and_failed_undo_keeps_it() {
         let dir = tempfile::tempdir().unwrap();
-        let mut j = Journal::open(dir.path().join("j")).unwrap();
+        let path = dir.path().join("j");
+        let mut j = Journal::open(&path).unwrap();
         let err = j
             .apply(ActionKind::KeepAwake, None, || {
                 Err::<UndoRecord, _>("denied")
@@ -367,7 +361,7 @@ mod tests {
             })
             .unwrap();
         assert!(j.undo(id, || Err("busy")).is_err());
-        let reopened = Journal::open(j.path()).unwrap();
+        let reopened = Journal::open(&path).unwrap();
         assert_eq!(reopened.pending().len(), 1);
         assert!(reopened.pending()[0].applied);
     }

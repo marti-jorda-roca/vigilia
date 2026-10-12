@@ -41,9 +41,7 @@ enum WireMessage {
 /// The JSON Schema for the protocol, as checked in at `schema/protocol.schema.json`.
 pub fn schema() -> serde_json::Value {
     let mut schema = schemars::schema_for!(WireMessage).to_value();
-    if let Some(obj) = schema.as_object_mut() {
-        obj.insert("title".into(), "Vigilia protocol".into());
-        obj.insert("x-protocol-version".into(), PROTOCOL_VERSION.into());
-    }
+    schema["title"] = "Vigilia protocol".into();
+    schema["x-protocol-version"] = PROTOCOL_VERSION.into();
     schema
 }

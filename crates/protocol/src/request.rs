@@ -110,7 +110,7 @@ impl Request {
         Self::from_value(value)
     }
 
-    pub fn from_value(value: Value) -> Result<Self, RequestParseError> {
+    fn from_value(value: Value) -> Result<Self, RequestParseError> {
         let Value::Object(mut obj) = value else {
             return Err(RequestParseError {
                 id: None,

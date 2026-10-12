@@ -7,7 +7,7 @@ pub mod journal;
 pub mod paths;
 pub mod session;
 
-pub use clock::{Clock, ManualClock, Now, SystemClock};
+pub use clock::{Clock, Now, SystemClock};
 pub use config::Config;
 pub use journal::{ActionError, ActionId, ActionKind, Journal, PendingAction, UndoRecord};
 pub use paths::Paths;

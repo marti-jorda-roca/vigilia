@@ -4,7 +4,8 @@
 //! transport goes through here, so remote clients added later get the same checks as local ones.
 
 use vigilia_protocol::{
-    Call, ClientContext, Empty, ErrorCode, PROTOCOL_VERSION, Request, Response, SessionResult,
+    Call, ClientContext, Empty, ErrorBody, ErrorCode, PROTOCOL_VERSION, Request, Response, Session,
+    SessionResult,
 };
 
 use crate::bus::Subscription;
@@ -40,9 +41,9 @@ pub fn dispatch(svc: &mut Service, ctx: &ClientContext, req: Request) -> Dispatc
         )
         .into();
     }
-    let required = req.call.required_scope();
-    if !ctx.scopes.covers(required.as_ref()) {
-        let scope = required.map(|s| s.to_string()).unwrap_or_default();
+    if let Some(scope) = req.call.required_scope()
+        && !ctx.scopes.covers(&scope)
+    {
         tracing::info!(method = req.call.method(), origin = ?ctx.origin, "forbidden");
         return Response::err(
             Some(id),
@@ -52,25 +53,21 @@ pub fn dispatch(svc: &mut Service, ctx: &ClientContext, req: Request) -> Dispatc
         .into();
     }
 
-    let session = |r: Result<_, _>| match r {
+    let session = |r: Result<Option<Session>, ErrorBody>| match r {
         Ok(session) => Response::ok(id, &SessionResult { session }),
-        Err(e) => error_response(id, e),
+        Err(e) => Response::err(Some(id), e.code, e.message),
     };
     match req.call {
         Call::Hello {} => Response::ok(id, &svc.hello(ctx)).into(),
         Call::SessionStart(p) => session(svc.start_session(p).map(Some)).into(),
         Call::SessionExtend(p) => session(svc.extend(p).map(Some)).into(),
-        Call::SessionStop {} => session(svc.stop().map(Some)).into(),
+        Call::SessionStop {} => session(svc.end_session().map(Some)).into(),
         Call::SessionStatus {} => session(Ok(svc.status())).into(),
         Call::Subscribe(p) => Dispatched {
             response: Response::ok(id, &Empty {}),
             subscription: Some(svc.subscribe(&p.filter)),
         },
     }
-}
-
-fn error_response(id: u64, e: vigilia_protocol::ErrorBody) -> Response {
-    Response::err(Some(id), e.code, e.message)
 }
 
 #[cfg(test)]

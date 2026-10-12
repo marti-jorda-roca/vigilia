@@ -34,14 +34,11 @@ pub struct Deps {
     pub socket_activated: bool,
 }
 
-pub enum Msg {
-    Request {
-        ctx: ClientContext,
-        req: Request,
-        reply: oneshot::Sender<Dispatched>,
-    },
-    /// A connection that had subscribed has closed.
-    SubscriberGone,
+/// One request on its way to the service, with where to send the outcome.
+pub struct Msg {
+    ctx: ClientContext,
+    req: Request,
+    reply: oneshot::Sender<Dispatched>,
 }
 
 /// How transports talk to the service.
@@ -59,12 +56,8 @@ impl ServiceHandle {
     /// `None` if the service has stopped.
     pub async fn call(&self, ctx: ClientContext, req: Request) -> Option<Dispatched> {
         let (reply, rx) = oneshot::channel();
-        self.tx.send(Msg::Request { ctx, req, reply }).await.ok()?;
+        self.tx.send(Msg { ctx, req, reply }).await.ok()?;
         rx.await.ok()
-    }
-
-    pub async fn subscriber_gone(&self) {
-        let _ = self.tx.send(Msg::SubscriberGone).await;
     }
 }
 
@@ -89,7 +82,6 @@ pub struct Service {
     capabilities: Capabilities,
     /// The journaled keep-awake action of the current session.
     awake: Option<(ActionId, UndoRecord)>,
-    subscribers: usize,
     last_activity: Instant,
     armed: Option<DateTime<Utc>>,
 }
@@ -131,7 +123,6 @@ impl Service {
             machine: SessionMachine::new(),
             capabilities,
             awake: None,
-            subscribers: 0,
             last_activity: now.mono,
             armed: None,
         }
@@ -149,17 +140,14 @@ impl Service {
         self.rearm();
         let exit = loop {
             tokio::select! {
-                msg = rx.recv() => match msg {
-                    Some(Msg::Request { ctx, req, reply }) => {
-                        self.touch();
-                        let _ = reply.send(dispatch(&mut self, &ctx, req));
-                    }
-                    Some(Msg::SubscriberGone) => {
-                        self.subscribers = self.subscribers.saturating_sub(1);
-                        self.touch();
-                    }
-                    None => break Exit::Closed,
-                },
+                msg = rx.recv() => {
+                    let Some(Msg { ctx, req, reply }) = msg else {
+                        break Exit::Closed;
+                    };
+                    self.touch();
+                    let _ = reply.send(dispatch(&mut self, &ctx, req));
+                }
+                () = self.bus.subscriber_left() => self.touch(),
                 Some(()) = fired.recv() => {
                     self.armed = None;
                     if self.on_deadline() {
@@ -170,7 +158,7 @@ impl Service {
             }
             self.rearm();
         };
-        if exit != Exit::Idle && self.machine.current().is_some() {
+        if self.machine.current().is_some() {
             tracing::info!("shutting down; ending the session first");
             let _ = self.end_session();
         }
@@ -229,18 +217,13 @@ impl Service {
         Ok(session)
     }
 
-    pub(crate) fn stop(&mut self) -> Result<Session, ErrorBody> {
-        self.end_session()
-    }
-
-    pub(crate) fn subscribe(&mut self, filter: &[EventKind]) -> Subscription {
-        self.subscribers += 1;
+    pub(crate) fn subscribe(&self, filter: &[EventKind]) -> Subscription {
         self.bus.subscribe(filter)
     }
 
     /// Runs the undo steps and moves the session to `Ended`, or to `NeedsAttention` if an undo
     /// step failed (a later `stop` retries).
-    fn end_session(&mut self) -> Result<Session, ErrorBody> {
+    pub(crate) fn end_session(&mut self) -> Result<Session, ErrorBody> {
         self.machine.begin_end().map_err(session_error)?;
         let mut failure = None;
         if let Some((id, rec)) = self.awake.clone() {
@@ -277,6 +260,8 @@ impl Service {
                 .is_some_and(|d| d <= now.wall + DEADLINE_SLACK);
         if session_due {
             let _ = self.end_session();
+            // The idle countdown starts when the session ends, not at the last request.
+            self.touch();
             return false;
         }
         self.idle_deadline()
@@ -285,10 +270,12 @@ impl Service {
 
     /// When the service may exit, if it is idle: no session and no subscribers.
     fn idle_deadline(&self) -> Option<Instant> {
-        if self.machine.current().is_some() || self.subscribers > 0 {
+        if self.machine.current().is_some() || self.bus.subscribers() > 0 {
             return None;
         }
-        Some(self.last_activity + self.config.energy.idle_exit())
+        // `None` for an idle exit too far away to represent: never exit.
+        self.last_activity
+            .checked_add(self.config.energy.idle_exit())
     }
 
     /// Arms the one timer for the next deadline: the session end, or the idle exit.

@@ -108,7 +108,6 @@ async fn exits_when_idle_and_not_while_subscribed() {
     );
 
     drop(sub);
-    h.handle.subscriber_gone().await;
     tokio::time::sleep(5 * MIN - Duration::from_secs(1)).await;
     assert!(!h.task.is_finished());
     tokio::time::sleep(Duration::from_secs(2)).await;
@@ -123,6 +122,42 @@ async fn session_end_then_idle_exit() {
     assert_eq!((&mut h.task).await.unwrap(), Exit::Idle);
     assert!(!h.platform.awake());
     assert!(h.fires() <= 2, "{} wake-ups", h.fires());
+}
+
+#[tokio::test(start_paused = true)]
+async fn idle_countdown_starts_when_the_session_ends() {
+    let mut h = Harness::spawn();
+    h.start("1h").await;
+    tokio::time::sleep(60 * MIN + Duration::from_secs(1)).await;
+    assert!(!h.platform.awake());
+    assert!(!h.task.is_finished(), "exited right after the session");
+    tokio::time::sleep(5 * MIN).await;
+    assert_eq!((&mut h.task).await.unwrap(), Exit::Idle);
+}
+
+#[tokio::test(start_paused = true)]
+async fn dropped_subscription_without_notice_still_allows_idle_exit() {
+    let mut h = Harness::spawn();
+    // The response never reaches anyone: the subscription is dropped on the floor, as when a
+    // connection dies before its subscribe reply is written.
+    drop(h.call(Call::Subscribe(SubscribeParams::default())).await);
+    tokio::time::sleep(5 * MIN + Duration::from_secs(1)).await;
+    assert_eq!((&mut h.task).await.unwrap(), Exit::Idle);
+}
+
+#[tokio::test(start_paused = true)]
+async fn huge_idle_exit_config_does_not_crash() {
+    let config = Config {
+        energy: vigilia_core::config::EnergyConfig {
+            idle_exit_minutes: u64::MAX / 60,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut h = Harness::spawn_with(tempfile::tempdir().unwrap(), FakePlatform::new(), config);
+    h.call(Call::SessionStatus {}).await;
+    tokio::time::sleep(60 * MIN).await;
+    assert!(!h.task.is_finished());
 }
 
 #[tokio::test(start_paused = true)]
