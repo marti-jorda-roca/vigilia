@@ -1,0 +1,32 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=750']
+        exclude: ^Cargo.lock$
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      # Formats in place; the commit stops if anything changed, so you can review and re-stage.
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all
+        language: unsupported
+        types: [rust]
+        pass_filenames: false
+
+      # Lints change with Cargo.toml and clippy.toml too, not only with .rs files.
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --workspace --all-targets -- -D warnings
+        language: unsupported
+        files: (\.rs|^Cargo\.(toml|lock)|/Cargo\.toml|^clippy\.toml)$
+        pass_filenames: false
+        require_serial: true

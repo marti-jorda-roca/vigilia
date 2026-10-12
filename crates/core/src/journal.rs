@@ -28,7 +28,7 @@ pub enum ActionKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum UndoRecord {
-    /// An IOKit `PreventUserIdleSystemSleep` assertion. The OS releases it when the owning
+    /// An `IOKit` `PreventUserIdleSystemSleep` assertion. The OS releases it when the owning
     /// process exits, so after a crash there is nothing left to undo.
     IdleSleepAssertion { pid: u32, assertion_id: u32 },
     /// A backend that holds no OS state (tests, stubs).
@@ -274,7 +274,7 @@ impl Journal {
                 if let Some(a) = self.open.get_mut(&entry.action_id) {
                     a.applied = true;
                     if entry.undo.is_some() {
-                        a.undo = entry.undo.clone();
+                        a.undo.clone_from(&entry.undo);
                     }
                 }
             }
@@ -471,7 +471,6 @@ mod tests {
 
             // The crash: perform only part of `crash_op`, then drop everything in memory.
             match (crash_op, stage) {
-                (_, Stage::BeforeIntent) => {}
                 (Op::Apply, Stage::AfterIntent | Stage::AfterOsChange) => {
                     let n = next;
                     let id = j.next_seq;
@@ -485,7 +484,8 @@ mod tests {
                     let (_, n) = open[i % open.len()];
                     os.remove(&n);
                 }
-                (Op::Undo(_), _) => {}
+                // Nothing reached the journal or the OS before the crash.
+                (_, Stage::BeforeIntent) | (Op::Undo(_), _) => {}
             }
             drop(j);
 

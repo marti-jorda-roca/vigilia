@@ -189,6 +189,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::cognitive_complexity,
+        reason = "each assert macro expands to a branch; the test itself is linear"
+    )]
     fn start_extend_and_end() {
         let clock = clock();
         let mut m = SessionMachine::new();

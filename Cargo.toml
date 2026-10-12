@@ -6,7 +6,7 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.94"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/marti-jorda-roca/vigilia"
 
 [workspace.dependencies]
@@ -34,11 +34,49 @@ uuid = { version = "1", features = ["v4", "serde"] }
 proptest = "1.12"
 tempfile = "3"
 
+# CI runs clippy with `-D warnings`, so every "warn" below fails the build.
+# Thresholds for the size and complexity lints live in clippy.toml.
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
+unused = { level = "warn", priority = -1 }
+rust_2018_idioms = { level = "warn", priority = -1 }
+unused_lifetimes = "warn"
+unused_macro_rules = "warn"
+redundant_lifetimes = "warn"
 
 [workspace.lints.clippy]
+# Bugs, redundant and simplifiable code (bugbear, SIM, RET, PIE, C4).
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Size and complexity limits (C90, PLR).
+cognitive_complexity = "warn"
+excessive_nesting = "warn"
+too_many_arguments = "allow"
+# Leftover debugging and output outside the CLI (T201).
 dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+todo = "warn"
+unimplemented = "warn"
+# Unsafe code must say why it is sound.
+undocumented_unsafe_blocks = "warn"
+mem_forget = "warn"
+# Explicit over implicit.
+rc_buffer = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+str_to_string = "warn"
+unneeded_field_pattern = "warn"
+allow_attributes_without_reason = "warn"
+allow_attributes = "warn"
+# Pedantic lints that cost more than they catch here.
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+similar_names = "allow"
+# Flags `map_err(fn_taking_owned_error)` and handler params; borrowing buys nothing there.
+needless_pass_by_value = "allow"
+unchecked_time_subtraction = "allow"
 
 [profile.release]
 lto = true

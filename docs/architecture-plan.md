@@ -375,4 +375,4 @@ Release builds use LTO, `opt-level = "s"` and `panic = "abort"` in the daemon pr
 - Socket activation and idle exit make the first command after a pause slightly slower (the service has to start). Keep startup under ~50 ms; measure it in M2.
 - Windows has no socket activation, so the service stays resident there. It must truly block (no timers) while idle.
 - Remote access is the largest security risk. It stays opt-in, behind a build feature, scoped per device, audited, and never offers a raw shell.
-- Name and license: the plan assumes the name `vigilia` and the MIT license, with credit to Insomnia for the concept.
+- Name and license: the plan assumes the name `vigilia` and the Apache-2.0 license, with credit to Insomnia for the concept.

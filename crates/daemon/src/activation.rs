@@ -1,9 +1,9 @@
-//! launchd socket activation. With the LaunchAgent installed, launchd owns the socket and starts
+//! launchd socket activation. With the `LaunchAgent` installed, launchd owns the socket and starts
 //! the service on the first connection; the service picks the socket up here.
 
 use std::os::unix::net::UnixListener;
 
-/// The `Sockets` key name in the LaunchAgent plist.
+/// The `Sockets` key name in the `LaunchAgent` plist.
 #[cfg(target_os = "macos")]
 const SOCKET_NAME: &std::ffi::CStr = c"Listeners";
 
@@ -24,7 +24,7 @@ pub fn inherited_listener() -> Option<UnixListener> {
     let mut fds: *mut libc::c_int = std::ptr::null_mut();
     let mut count: libc::size_t = 0;
     // SAFETY: valid out pointers; on success launchd hands us a malloc'd array we free below.
-    let ret = unsafe { launch_activate_socket(SOCKET_NAME.as_ptr(), &mut fds, &mut count) };
+    let ret = unsafe { launch_activate_socket(SOCKET_NAME.as_ptr(), &raw mut fds, &raw mut count) };
     if ret != 0 || fds.is_null() {
         return None;
     }

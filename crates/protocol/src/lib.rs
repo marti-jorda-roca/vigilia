@@ -32,7 +32,7 @@ pub const PROTOCOL_VERSION: u32 = 1;
 /// schema.
 #[derive(schemars::JsonSchema)]
 #[serde(untagged)]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "never constructed, only fed to schemars")]
 enum WireMessage {
     Request(Request),
     ServerMessage(ServerMessage),

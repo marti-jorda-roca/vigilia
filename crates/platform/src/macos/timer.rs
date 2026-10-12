@@ -64,7 +64,7 @@ unsafe extern "C" fn on_fire(ctx: *mut c_void) {
 
 unsafe extern "C" fn on_cancel(ctx: *mut c_void) {
     // SAFETY: runs exactly once, after the last event handler; reclaims the box.
-    drop(unsafe { Box::from_raw(ctx as *mut Sender) });
+    drop(unsafe { Box::from_raw(ctx.cast::<Sender>()) });
 }
 
 pub struct GcdTimer {
@@ -77,7 +77,7 @@ unsafe impl Send for GcdTimer {}
 impl GcdTimer {
     pub fn new() -> (Self, TimerFired) {
         let (tx, rx) = mpsc::unbounded_channel();
-        let ctx = Box::into_raw(Box::new(tx)) as *mut c_void;
+        let ctx = Box::into_raw(Box::new(tx)).cast::<c_void>();
         // SAFETY: standard GCD setup on a global queue. The source starts suspended; we set its
         // context and handlers, park it at "never", and resume it.
         let source = unsafe {
@@ -100,12 +100,12 @@ impl DeadlineTimer for GcdTimer {
     fn arm(&mut self, at: DateTime<Utc>, leeway: Duration) {
         let when = libc::timespec {
             tv_sec: at.timestamp() as libc::time_t,
-            tv_nsec: at.timestamp_subsec_nanos() as libc::c_long,
+            tv_nsec: libc::c_long::from(at.timestamp_subsec_nanos()),
         };
         let leeway = u64::try_from(leeway.as_nanos()).unwrap_or(u64::MAX);
         // SAFETY: `self.source` is a live timer source; a one-shot timer has interval FOREVER.
         unsafe {
-            let start = dispatch_walltime(&when, 0);
+            let start = dispatch_walltime(&raw const when, 0);
             dispatch_source_set_timer(self.source, start, DISPATCH_TIME_FOREVER, leeway);
         }
     }
@@ -113,7 +113,7 @@ impl DeadlineTimer for GcdTimer {
     fn disarm(&mut self) {
         // SAFETY: as in `arm`; a start of FOREVER means it never fires.
         unsafe {
-            dispatch_source_set_timer(self.source, DISPATCH_TIME_FOREVER, DISPATCH_TIME_FOREVER, 0)
+            dispatch_source_set_timer(self.source, DISPATCH_TIME_FOREVER, DISPATCH_TIME_FOREVER, 0);
         };
     }
 }

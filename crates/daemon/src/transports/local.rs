@@ -2,14 +2,18 @@
 //! the service; they get `ClientContext::local()`.
 
 use std::io;
+use std::ops::ControlFlow;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 use vigilia_protocol::{ClientContext, ErrorCode, Request, Response};
 
+use crate::bus::Subscription;
 use crate::service::ServiceHandle;
 
 /// Longest request line accepted. Requests are tiny; this only stops a runaway client.
@@ -55,78 +59,96 @@ fn peer_allowed(peer_uid: u32, own_uid: u32) -> bool {
 }
 
 async fn handle(stream: UnixStream, service: ServiceHandle) {
-    let (read, mut write) = stream.into_split();
-    let (out, mut out_rx) = mpsc::channel::<String>(32);
-    let writer = tokio::spawn(async move {
-        while let Some(line) = out_rx.recv().await {
-            if write.write_all(line.as_bytes()).await.is_err() {
-                break;
-            }
-        }
-    });
+    let (read, write) = stream.into_split();
+    let (out, out_rx) = mpsc::channel::<String>(32);
+    let writer = tokio::spawn(write_lines(write, out_rx));
 
     let mut reader = BufReader::new(read);
-    let mut forward: Option<tokio::task::JoinHandle<()>> = None;
+    let mut forward: Option<JoinHandle<()>> = None;
     let mut line = String::new();
-    loop {
-        line.clear();
-        match (&mut reader)
-            .take(MAX_LINE as u64 + 1)
-            .read_line(&mut line)
-            .await
-        {
-            Ok(0) => break,
-            Ok(_) if line.len() > MAX_LINE => {
-                let resp = Response::err(None, ErrorCode::BadRequest, "request line too long");
-                let _ = out.send(encode(&resp)).await;
-                break;
-            }
-            Ok(_) => {}
-            Err(error) => {
-                tracing::debug!(%error, "connection read failed");
-                break;
-            }
-        }
+    while read_request_line(&mut reader, &mut line, &out).await {
         if line.trim().is_empty() {
             continue;
         }
-        let req = match Request::parse(line.trim_end()) {
-            Ok(req) => req,
-            Err(e) => {
-                let resp = Response::err(e.id, ErrorCode::BadRequest, e.message);
-                if out.send(encode(&resp)).await.is_err() {
-                    break;
-                }
-                continue;
-            }
-        };
-        let Some(dispatched) = service.call(ClientContext::local(), req).await else {
+        let ControlFlow::Continue(subscription) = answer(line.trim_end(), &service, &out).await
+        else {
             break;
         };
-        if out.send(encode(&dispatched.response)).await.is_err() {
-            break;
-        }
-        if let Some(mut sub) = dispatched.subscription {
-            if let Some(previous) = forward.take() {
-                previous.abort();
-                service.subscriber_gone().await;
-            }
-            let out = out.clone();
-            forward = Some(tokio::spawn(async move {
-                while let Some(event) = sub.recv().await {
-                    if out.send(encode(&event)).await.is_err() {
-                        break;
-                    }
-                }
-            }));
+        if let Some(sub) = subscription {
+            stop_forwarding(forward.take(), &service).await;
+            forward = Some(tokio::spawn(forward_events(sub, out.clone())));
         }
     }
-    if let Some(task) = forward {
+    stop_forwarding(forward, &service).await;
+    drop(out);
+    let _ = writer.await;
+}
+
+/// Reads the next request line into `line`. Returns false when the connection should close: on
+/// EOF, on a read error, or after replying to a line longer than `MAX_LINE`.
+async fn read_request_line(
+    reader: &mut BufReader<OwnedReadHalf>,
+    line: &mut String,
+    out: &mpsc::Sender<String>,
+) -> bool {
+    line.clear();
+    match reader.take(MAX_LINE as u64 + 1).read_line(line).await {
+        Ok(0) => false,
+        Ok(_) if line.len() > MAX_LINE => {
+            let resp = Response::err(None, ErrorCode::BadRequest, "request line too long");
+            let _ = out.send(encode(&resp)).await;
+            false
+        }
+        Ok(_) => true,
+        Err(error) => {
+            tracing::debug!(%error, "connection read failed");
+            false
+        }
+    }
+}
+
+/// Replies to one request line. Breaks when the connection should close.
+async fn answer(
+    line: &str,
+    service: &ServiceHandle,
+    out: &mpsc::Sender<String>,
+) -> ControlFlow<(), Option<Subscription>> {
+    let (response, subscription) = match Request::parse(line) {
+        Ok(req) => {
+            let Some(dispatched) = service.call(ClientContext::local(), req).await else {
+                return ControlFlow::Break(());
+            };
+            (dispatched.response, dispatched.subscription)
+        }
+        Err(e) => (Response::err(e.id, ErrorCode::BadRequest, e.message), None),
+    };
+    if out.send(encode(&response)).await.is_err() {
+        return ControlFlow::Break(());
+    }
+    ControlFlow::Continue(subscription)
+}
+
+async fn write_lines(mut write: OwnedWriteHalf, mut lines: mpsc::Receiver<String>) {
+    while let Some(line) = lines.recv().await {
+        if write.write_all(line.as_bytes()).await.is_err() {
+            break;
+        }
+    }
+}
+
+async fn forward_events(mut sub: Subscription, out: mpsc::Sender<String>) {
+    while let Some(event) = sub.recv().await {
+        if out.send(encode(&event)).await.is_err() {
+            break;
+        }
+    }
+}
+
+async fn stop_forwarding(task: Option<JoinHandle<()>>, service: &ServiceHandle) {
+    if let Some(task) = task {
         task.abort();
         service.subscriber_gone().await;
     }
-    drop(out);
-    let _ = writer.await;
 }
 
 fn encode<T: serde::Serialize>(msg: &T) -> String {

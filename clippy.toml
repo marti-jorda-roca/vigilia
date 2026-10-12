@@ -1,0 +1,7 @@
+# Thresholds for the size and complexity lints enabled in Cargo.toml.
+cognitive-complexity-threshold = 10
+too-many-lines-threshold = 60
+excessive-nesting-threshold = 5
+
+# Tests may print.
+allow-print-in-tests = true

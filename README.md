@@ -1,15 +1,29 @@
-# Vigilia
+<p align="center"><img src="docs/assets/vigilia-banner.svg" alt="Vigilia: a pixel-art guard holding a lantern" width="640"></p>
 
-Keep your laptop awake for a set time, from the terminal or from a coding agent, and pay almost nothing in battery for it. Later: with the lid closed, and with your agents reachable from your phone.
+Keep your laptop awake for a set time, from the terminal or from a coding agent, and pay almost nothing in battery for it.
 
-Vigilia is a per-user Rust service plus a CLI. The concept comes from [Insomnia](https://github.com/krishhgg/Insomnia) (MIT), a macOS menu bar app; Vigilia aims for macOS, Linux and Windows.
+## Install
 
-- Architecture: [`docs/architecture-plan.md`](docs/architecture-plan.md)
-- Build order and release plan: [`docs/execution-plan.md`](docs/execution-plan.md)
+There are no prebuilt binaries yet, so for now you build the CLI from source. It needs macOS and [rustup](https://rustup.rs). The Rust version is pinned in `rust-toolchain.toml`, and rustup installs it the first time you build.
 
-## Status
+```sh
+git clone https://github.com/marti-jorda-roca/vigilia.git
+cd vigilia
+cargo install --path crates/cli --locked
+```
 
-Work in progress towards v0.1 (macOS idle-sleep sessions from the CLI).
+This puts a single `vigilia` binary in `~/.cargo/bin`. Make sure that directory is on your `PATH`, then check it works:
+
+```sh
+vigilia start 2m
+vigilia status --watch
+```
+
+You don't need to start the service yourself. `vigilia daemon` is the service, and client commands start it when it isn't running. It exits on its own after 5 idle minutes with no session.
+
+For every command, durations, `--json` output, config and errors, see the [CLI documentation](docs/cli.md).
+
+The `crates/cli` crate is still being written as part of v0.1, so the commands above will work once it lands. A `vigilia install` command (LaunchAgent with socket activation) comes in v0.2, and a signed `.app` comes later.
 
 ## Layout
 
@@ -24,8 +38,30 @@ Work in progress towards v0.1 (macOS idle-sleep sessions from the CLI).
 
 ```sh
 cargo test --workspace
+```
+
+### Lint and format
+
+CI runs these two checks and fails on any warning, so run them before you push:
+
+```sh
+cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all
+```
+
+To run both on every commit, install [pre-commit](https://pre-commit.com) (`brew install pre-commit`, or [prek](https://github.com/j178/prek)) and enable the hooks once per clone:
+
+```sh
+pre-commit install
+pre-commit run --all-files   # optional: check the whole tree now
+```
+
+`cargo fmt --all` rewrites the files in place. Clippy can fix some warnings for you with `cargo clippy --fix --workspace --all-targets --allow-dirty`.
+
+The macOS code is only compiled on macOS. To check the other platforms from a Mac, add their targets once with `rustup target add x86_64-unknown-linux-gnu x86_64-pc-windows-msvc`, then pass `--target` to clippy:
+
+```sh
+cargo clippy --workspace --all-targets --target x86_64-unknown-linux-gnu -- -D warnings
 ```
 
 The protocol's JSON Schema in `crates/protocol/schema/protocol.schema.json` is generated from the Rust types, and a test fails when it is stale. After changing protocol types:
@@ -38,4 +74,4 @@ Protocol changes may only add things (new methods, events, optional fields). Fro
 
 ## License
 
-MIT
+Apache-2.0. See [`LICENSE`](LICENSE).

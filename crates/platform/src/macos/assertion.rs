@@ -1,4 +1,4 @@
-//! IOKit power assertions.
+//! `IOKit` power assertions.
 
 use core_foundation::base::{CFRelease, TCFType};
 use core_foundation::dictionary::CFDictionaryRef;
@@ -38,7 +38,7 @@ pub fn prevent_idle_sleep(name: &str) -> Result<u32, IOReturn> {
             kind.as_concrete_TypeRef(),
             K_IOPM_ASSERTION_LEVEL_ON,
             name.as_concrete_TypeRef(),
-            &mut id,
+            &raw mut id,
         )
     };
     if ret == K_IORETURN_SUCCESS {
