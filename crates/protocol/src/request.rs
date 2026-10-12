@@ -40,7 +40,9 @@ pub enum Call {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SessionStartParams {
-    pub duration: HumanDuration,
+    /// How long the session lasts. Absent or `null`: until `session.stop`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration: Option<HumanDuration>,
     /// Keep the machine awake with the lid closed too. Not supported before v0.2.
     #[serde(default)]
     pub lid_closed_awake: bool,
@@ -163,10 +165,27 @@ mod tests {
         assert_eq!(
             req.call,
             Call::SessionStart(SessionStartParams {
-                duration: HumanDuration::from_secs(7_200),
+                duration: Some(HumanDuration::from_secs(7_200)),
                 lid_closed_awake: true,
             })
         );
+    }
+
+    #[test]
+    fn start_without_a_duration_runs_until_stopped() {
+        for line in [
+            r#"{"id":1,"v":1,"method":"session.start"}"#,
+            r#"{"id":1,"v":1,"method":"session.start","params":{"duration":null}}"#,
+        ] {
+            assert_eq!(
+                Request::parse(line).unwrap().call,
+                Call::SessionStart(SessionStartParams {
+                    duration: None,
+                    lid_closed_awake: false,
+                }),
+                "{line}"
+            );
+        }
     }
 
     #[test]
@@ -209,7 +228,11 @@ mod tests {
         let calls = [
             Call::Hello {},
             Call::SessionStart(SessionStartParams {
-                duration: HumanDuration::from_secs(60),
+                duration: Some(HumanDuration::from_secs(60)),
+                lid_closed_awake: false,
+            }),
+            Call::SessionStart(SessionStartParams {
+                duration: None,
                 lid_closed_awake: false,
             }),
             Call::SessionExtend(SessionExtendParams {

@@ -74,7 +74,7 @@ impl Harness {
 
     pub async fn start(&mut self, duration: &str) -> Dispatched {
         self.call(Call::SessionStart(SessionStartParams {
-            duration: duration.parse::<HumanDuration>().unwrap(),
+            duration: Some(duration.parse::<HumanDuration>().unwrap()),
             lid_closed_awake: false,
         }))
         .await

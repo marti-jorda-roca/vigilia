@@ -134,7 +134,7 @@ vigilia/
 
 ## Core concepts (crates/core)
 
-- **Session**: `{id, started_at, ends_at, state: Active | Ending | Ended | NeedsAttention}`. Time is computed from the wall clock with a monotonic check, so system clock changes can't extend a session.
+- **Session**: `{id, started_at, ends_at, state: Active | Ending | Ended | NeedsAttention}`, with `ends_at` null for a session that runs until stopped. Time is computed from the wall clock with a monotonic check, so system clock changes can't extend a session.
 - **Action**: any reversible change to the OS. Each one has `apply()`, `undo()` and an `UndoRecord` (the state needed to restore, for example the previous brightness). Undo is idempotent.
 - **Journal**: an append-only JSONL file. Write and fsync an `Intent` entry before calling `apply`, then append `Applied`, `Undone` or `Failed`. On startup, and in `recover`, replay every entry that isn't finished.
 - **Ownership proof for frozen processes.** Record the pid **and the process start time**. Only send `SIGCONT` (or resume the process) when both still match. This guards against the OS reusing a pid. A process we can't prove is ours is reported to the user, never touched.
@@ -202,13 +202,13 @@ trait Platform {
 - **Framing**: one JSON object per line. Requests carry `id`, `v` (protocol version) and `method`. The same messages are carried unchanged over remote transports (WebSocket text frames, or wrapped in a bot bridge).
 - **Methods are grouped by area:**
   - `hello`: returns protocol version, capabilities, and the scopes this client was granted.
-  - `session.start {duration, lid_closed_awake}`, `session.extend {duration}`, `session.stop`, `session.status`
+  - `session.start {duration?, lid_closed_awake}` (no `duration`: runs until `session.stop`), `session.extend {duration}`, `session.stop`, `session.status`
   - `config.get`, `config.set`
   - `recover`
   - `agent.list`, `agent.tail {agent, lines}`, `agent.send {agent, text, submit}` (M8)
   - `device.list`, `device.revoke` (M9; local clients only)
   - `subscribe {filter}`: the filter is a list of event kinds and, optionally, agent ids.
-- **Events**: `session_changed {session}` (includes `ends_at`; clients compute the remaining time locally, and there is no periodic tick), `lid_changed`, `power_changed`, `network_changed`, `warning {kind, detail}`, `needs_attention`, `agent_event {agent, kind: needs_input | finished | error, summary}`.
+- **Events**: `session_changed {session}` (includes `ends_at`, `null` for a session without an end; clients compute the remaining or elapsed time locally, and there is no periodic tick), `lid_changed`, `power_changed`, `network_changed`, `warning {kind, detail}`, `needs_attention`, `agent_event {agent, kind: needs_input | finished | error, summary}`.
 - **Scopes**: `session.read`, `session.control`, `agent.read`, `agent.send:<agent-id or *>`, `config.write`, `admin`. `dispatch` rejects any method the client's scopes don't cover with a typed `forbidden` error.
 - A JSON Schema is generated with `schemars` into `crates/protocol/schema/`. This is the contract for the Swift, Windows and phone clients, and CI fails if the schema drifts from the Rust types.
 

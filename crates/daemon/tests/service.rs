@@ -94,6 +94,36 @@ async fn extend_moves_the_deadline() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_session_without_an_end_runs_until_stopped() {
+    let mut h = Harness::spawn();
+    let started: SessionResult = h
+        .call(Call::SessionStart(vigilia_protocol::SessionStartParams {
+            duration: None,
+            lid_closed_awake: false,
+        }))
+        .await
+        .response
+        .into_result()
+        .unwrap();
+    assert_eq!(started.session.unwrap().ends_at, None);
+
+    // Longer than any timed session may last, and long past the idle exit.
+    tokio::time::sleep(31 * 24 * 60 * MIN).await;
+    assert!(h.platform.awake());
+    assert!(!h.task.is_finished());
+    assert_eq!(h.fires(), 0, "nothing to wake up for");
+
+    let stopped: SessionResult = h
+        .call(Call::SessionStop {})
+        .await
+        .response
+        .into_result()
+        .unwrap();
+    assert_eq!(stopped.session.unwrap().state, SessionState::Ended);
+    assert!(!h.platform.awake());
+}
+
+#[tokio::test(start_paused = true)]
 async fn exits_when_idle_and_not_while_subscribed() {
     let mut h = Harness::spawn();
     let sub = h
@@ -259,7 +289,7 @@ async fn errors_for_bad_session_requests() {
     assert_eq!(code(h.start("31d").await), Some(ErrorCode::BadRequest));
     let lid = h
         .call(Call::SessionStart(vigilia_protocol::SessionStartParams {
-            duration: "1h".parse().unwrap(),
+            duration: Some("1h".parse().unwrap()),
             lid_closed_awake: true,
         }))
         .await;

@@ -14,8 +14,10 @@ use crate::event::Event;
 pub struct Session {
     pub id: String,
     pub started_at: DateTime<Utc>,
-    /// Clients draw the countdown from this; the service never sends ticks.
-    pub ends_at: DateTime<Utc>,
+    /// Clients draw the countdown from this; the service never sends ticks. `null` when the
+    /// session runs until `session.stop`.
+    #[schemars(required, extend("type" = ["string", "null"]))]
+    pub ends_at: Option<DateTime<Utc>>,
     pub state: SessionState,
     #[serde(default)]
     pub lid_closed_awake: bool,
@@ -163,7 +165,7 @@ mod tests {
         Session {
             id: "s1".into(),
             started_at: "2026-10-12T00:00:00Z".parse().unwrap(),
-            ends_at: "2026-10-12T02:00:00Z".parse().unwrap(),
+            ends_at: Some("2026-10-12T02:00:00Z".parse().unwrap()),
             state: SessionState::Active,
             lid_closed_awake: false,
         }
@@ -178,6 +180,17 @@ mod tests {
         };
         let result: SessionResult = resp.into_result().unwrap();
         assert_eq!(result.session.unwrap().state, SessionState::Active);
+    }
+
+    #[test]
+    fn a_session_without_an_end_sends_null() {
+        let session = Session {
+            ends_at: None,
+            ..session()
+        };
+        let line = serde_json::to_string(&session).unwrap();
+        assert!(line.contains(r#""ends_at":null"#), "{line}");
+        assert_eq!(serde_json::from_str::<Session>(&line).unwrap(), session);
     }
 
     #[test]
