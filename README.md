@@ -51,17 +51,6 @@ For lid-closed sessions, run `vigilia install` once: it shows a narrow sudoers r
 cargo test --workspace
 ```
 
-### Releasing
-
-Publishing a [GitHub Release](https://github.com/marti-jorda-roca/vigilia/releases) publishes every workspace crate to crates.io via [`.github/workflows/release.yml`](.github/workflows/release.yml), in dependency order (`vigilia-protocol`, `vigilia-core`, `vigilia-platform`, `vigilia-daemon`, then `vigilia`). Tag the release `vX.Y.Z`, matching `version` in the root `Cargo.toml`; the workflow refuses to publish when the tag and version differ, and skips versions that are already published, so a failed release can simply be re-run.
-
-One-time setup before the first release:
-
-1. Create an API token at [crates.io/me](https://crates.io/me) with the *Publish new crates* and *Publish updates to existing crates* scopes.
-2. Add it to this repository as the secret `CARGO_REGISTRY_TOKEN` (Settings → Secrets and variables → Actions).
-
-After the first release you can replace the token with [crates.io Trusted Publishing](https://crates.io/docs/trusted-publishing) if you prefer short-lived credentials.
-
 ### Lint and format
 
 CI runs these two checks and fails on any warning, so run them before you push:

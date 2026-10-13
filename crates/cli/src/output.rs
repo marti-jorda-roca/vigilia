@@ -71,7 +71,11 @@ pub fn human_line(session: Option<&Session>, now: DateTime<Utc>) -> String {
             elapsed(elapsed_ms(session, now))
         ),
         (SessionState::Ending, _) => "Ending the session".to_owned(),
-        (SessionState::Ended, _) => "Session ended".to_owned(),
+        (SessionState::Ended, _) => format!(
+            "Session ended · started {} · ran {}",
+            clock_time(session.started_at, now),
+            elapsed(elapsed_ms(session, now))
+        ),
         (SessionState::NeedsAttention, _) => {
             "Needs attention: undoing the session's changes failed, \
              so this machine may not sleep normally. Run `vigilia stop` to retry."
@@ -255,6 +259,13 @@ mod tests {
         assert!(active.ends_with(" · 1m 30s left"), "{active}");
         let open = human_line(Some(&until_stopped(90_000, now)), now);
         assert_eq!(open, "Awake until stopped · 1m 30s so far");
+        let ended = Session {
+            started_at: now - TimeDelta::milliseconds(90_000),
+            ..session(SessionState::Ended, 0, now)
+        };
+        let ended = human_line(Some(&ended), now);
+        assert!(ended.starts_with("Session ended · started "), "{ended}");
+        assert!(ended.ends_with(" · ran 1m 30s"), "{ended}");
         let attention = human_line(Some(&session(SessionState::NeedsAttention, 0, now)), now);
         assert!(attention.contains("vigilia stop"), "{attention}");
     }

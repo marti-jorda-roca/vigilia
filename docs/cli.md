@@ -55,7 +55,7 @@ Adds `<duration>` to the running session's remaining time. `vigilia extend 30m` 
 
 ### `vigilia stop`
 
-Ends the session now and lets the Mac sleep normally again. If no session is running, it prints `No session running` and still succeeds, so a cleanup step doesn't fail because the session already ran out.
+Ends the session now and lets the Mac sleep normally again. It prints when the session started and how long it ran, for example `Session ended · started 09:00 · ran 1m 30s`. If no session is running, it prints `No session running` and still succeeds, so a cleanup step doesn't fail because the session already ran out.
 
 If undoing a session's changes ever fails, the session stays in the `NeedsAttention` state and the Mac may not sleep normally. Running `vigilia stop` again retries the undo.
 
