@@ -63,6 +63,11 @@ fn notice(event: &Event, mode: Mode, out: &mut dyn Write) {
     let text = match event {
         Event::Warning { kind, detail } => format!("warning ({kind}): {detail}"),
         Event::NeedsAttention { detail } => format!("needs attention: {detail}"),
+        Event::LidChanged { state } => format!("lid {state:?}").to_lowercase(),
+        Event::PowerChanged { power } => match power.battery_percent {
+            Some(percent) => format!("battery at {percent}%"),
+            None => "power changed".to_owned(),
+        },
         Event::SessionChanged { .. } => return,
     };
     let _ = match mode {

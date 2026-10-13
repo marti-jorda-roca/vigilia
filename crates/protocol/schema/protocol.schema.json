@@ -17,6 +17,11 @@
     "Capabilities": {
       "description": "What this OS and machine support, so clients can hide what isn't available.",
       "properties": {
+        "backstop": {
+          "default": false,
+          "description": "A crash-recovery backstop job can be registered during a session.",
+          "type": "boolean"
+        },
         "keep_awake_idle": {
           "default": false,
           "description": "Prevent idle sleep while the lid is open.",
@@ -25,6 +30,16 @@
         "keep_awake_lid_closed": {
           "default": false,
           "description": "Keep running with the lid closed.",
+          "type": "boolean"
+        },
+        "lid_events": {
+          "default": false,
+          "description": "Lid open/close events are available.",
+          "type": "boolean"
+        },
+        "power_events": {
+          "default": false,
+          "description": "Battery and heat change events are available.",
           "type": "boolean"
         },
         "socket_activation": {
@@ -100,6 +115,40 @@
           "type": "object"
         },
         {
+          "description": "The lid opened or closed.",
+          "properties": {
+            "event": {
+              "const": "lid_changed",
+              "type": "string"
+            },
+            "state": {
+              "$ref": "#/$defs/LidState"
+            }
+          },
+          "required": [
+            "event",
+            "state"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Battery or heat changed.",
+          "properties": {
+            "event": {
+              "const": "power_changed",
+              "type": "string"
+            },
+            "power": {
+              "$ref": "#/$defs/PowerSnapshot"
+            }
+          },
+          "required": [
+            "event",
+            "power"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Something clients should show, but that doesn't stop the session.",
           "properties": {
             "detail": {
@@ -142,6 +191,8 @@
     "EventKind": {
       "enum": [
         "session_changed",
+        "lid_changed",
+        "power_changed",
         "warning",
         "needs_attention"
       ],
@@ -180,6 +231,42 @@
       "description": "One or more <number><unit> groups, units d, h, m, s. Example: \"1d2h30m\".",
       "pattern": "^([0-9]+[dhmsDHMS])+$",
       "type": "string"
+    },
+    "LidState": {
+      "description": "Whether the laptop lid is open or closed.",
+      "enum": [
+        "open",
+        "closed"
+      ],
+      "type": "string"
+    },
+    "PowerSnapshot": {
+      "description": "A reading of battery and heat, taken when the OS reports a change (never polled).",
+      "properties": {
+        "battery_percent": {
+          "description": "Battery charge, or `None` on a machine without a battery.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "on_ac": {
+          "description": "Whether external power is connected.",
+          "type": "boolean"
+        },
+        "thermal": {
+          "$ref": "#/$defs/ThermalLevel"
+        }
+      },
+      "required": [
+        "battery_percent",
+        "on_ac",
+        "thermal"
+      ],
+      "type": "object"
     },
     "Request": {
       "description": "One request from a client. `id` is echoed in the response; `v` is the protocol version the\nclient speaks.",
@@ -274,6 +361,23 @@
             },
             "params": {
               "$ref": "#/$defs/SubscribeParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Pretends the lid opened or closed (`vigilia debug simulate-lid`). Admin only.",
+          "properties": {
+            "method": {
+              "const": "debug.simulate_lid",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/SimulateLidParams"
             }
           },
           "required": [
@@ -458,6 +562,17 @@
         }
       ]
     },
+    "SimulateLidParams": {
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/LidState"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "type": "object"
+    },
     "SubscribeParams": {
       "properties": {
         "filter": {
@@ -470,6 +585,16 @@
         }
       },
       "type": "object"
+    },
+    "ThermalLevel": {
+      "description": "The machine's heat level, mirroring the OS thermal state.",
+      "enum": [
+        "nominal",
+        "fair",
+        "serious",
+        "critical"
+      ],
+      "type": "string"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",

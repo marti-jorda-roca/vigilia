@@ -11,7 +11,23 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct Config {
     pub energy: EnergyConfig,
+    pub rules: RulesConfig,
     pub log: LogConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RulesConfig {
+    /// End the session when the battery drops below this percent.
+    pub battery_floor_percent: u8,
+}
+
+impl Default for RulesConfig {
+    fn default() -> Self {
+        Self {
+            battery_floor_percent: 10,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

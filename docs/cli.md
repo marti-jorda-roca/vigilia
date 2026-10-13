@@ -12,7 +12,7 @@ vigilia extend 30m      # add 30 minutes
 vigilia stop            # end the session now
 ```
 
-While a session runs, the Mac doesn't idle-sleep. The display can still turn off, and closing the lid still puts the Mac to sleep (lid-closed sessions come in v0.2). When the session ends, sleep goes back to normal.
+While a session runs, the Mac doesn't idle-sleep and the display can still turn off. With `--lid` (see below) it also stays awake with the lid closed. When the session ends, sleep goes back to normal.
 
 ## Durations
 
@@ -30,6 +30,10 @@ Examples: `90s`, `45m`, `2h`, `1h30m`, `1d2h`. Units are case-insensitive. A bar
 A duration can't be zero, and a session with a duration can't run longer than 30 days. For longer, start one without a duration (see below).
 
 ## Commands
+
+### `vigilia start [<duration>] [--lid] [--extend]`
+
+With `--lid`, the session also keeps the Mac awake with the lid closed (`pmset disablesleep`, through the sudoers rule installed by `vigilia install`). During a lid-closed session a backstop job runs `vigilia recover` every 5 minutes, so a crash restores normal sleep; the job is removed when the session ends. Battery and heat rules can end a lid-closed session early (see Configuration).
 
 ### `vigilia start [<duration>] [--extend]`
 
@@ -64,6 +68,24 @@ Shows the current session, or that there is none. It exits with code 4 if the se
 - **In a terminal**, one line with a countdown, redrawn in place. The countdown is computed locally from the session's end time. It redraws once a second in the last hour, and once a minute before that. A session without an end shows the time since it started instead, redrawn once a second in its first hour and once a minute after that.
 - **In a pipe or a file**, one line each time the session changes.
 - **With `--json`**, one `{"session": …}` line each time the session changes (NDJSON).
+
+### `vigilia recover`
+
+Undoes anything a crashed session left behind and restores normal sleep. It takes the service's lock itself, so it works exactly when the service is dead; while the service runs it reports that there is nothing to do. The backstop job and the run-once-at-login job both call this.
+
+### `vigilia install` / `vigilia uninstall`
+
+`install` (macOS) shows the sudoers rule below and asks for confirmation (skip with `--yes`), then installs the socket-activated service LaunchAgent, the run-once-at-login `recover` job, and the rule as `/etc/sudoers.d/vigilia`. The rule covers exactly two commands:
+
+```
+<user> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0
+```
+
+`uninstall` removes all of it, including any backstop job.
+
+### `vigilia debug simulate-lid close|open`
+
+Pretends the lid closed or opened: the service publishes the same `lid_changed` event a real lid movement produces. Useful for testing lid behaviour without shutting the laptop.
 
 ### `vigilia daemon`
 
@@ -179,3 +201,14 @@ These are designed in the [architecture plan](architecture-plan.md#cli) but not 
 | `vigilia debug simulate-lid close\|open` | v0.2 |
 | `vigilia agent list\|tail\|send\|notify` | v0.4 |
 | `vigilia remote enable\|disable\|pair\|devices\|revoke` | v0.5 |
+
+## Configuration
+
+`config.toml` accepts a `[rules]` section:
+
+```toml
+[rules]
+battery_floor_percent = 10   # end the session below this charge
+```
+
+Critical heat always ends the session. Rules are checked only when the OS reports a battery or heat change (and once when a session starts), never on a timer.

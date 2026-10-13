@@ -1,7 +1,7 @@
 //! Command-line arguments.
 
-use clap::{Parser, Subcommand};
-use vigilia_protocol::HumanDuration;
+use clap::{Parser, Subcommand, ValueEnum};
+use vigilia_protocol::{HumanDuration, LidState};
 
 /// Keep this machine awake for a set time.
 ///
@@ -26,6 +26,9 @@ pub enum Command {
         /// of failing.
         #[arg(long, requires = "duration")]
         extend: bool,
+        /// Keep the machine awake with the lid closed too (macOS, needs `vigilia install`).
+        #[arg(long)]
+        lid: bool,
     },
     /// Add <DURATION> to the running session.
     Extend { duration: HumanDuration },
@@ -39,6 +42,46 @@ pub enum Command {
     },
     /// Run the service in the foreground. Client commands start it when needed.
     Daemon,
+    /// Undo anything a crashed session left behind and restore normal sleep. This is the
+    /// backstop entry point; it is also safe to run by hand.
+    Recover,
+    /// Install the `LaunchAgents` and the sudoers rule for lid-closed sessions (macOS).
+    /// Shows the rule and asks first, unless `--yes` is given.
+    Install {
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Remove what `vigilia install` installed.
+    Uninstall {
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Debugging helpers.
+    Debug {
+        #[command(subcommand)]
+        command: DebugCommand,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+pub enum DebugCommand {
+    /// Pretend the lid closed or opened.
+    SimulateLid { state: LidArg },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum LidArg {
+    Close,
+    Open,
+}
+
+impl From<LidArg> for LidState {
+    fn from(arg: LidArg) -> Self {
+        match arg {
+            LidArg::Close => LidState::Closed,
+            LidArg::Open => LidState::Open,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -60,21 +103,24 @@ mod tests {
             command(&["start", "2h"]),
             Command::Start {
                 duration: Some(two_hours),
-                extend: false
+                extend: false,
+                lid: false
             }
         );
         assert_eq!(
             command(&["start", "2h", "--extend"]),
             Command::Start {
                 duration: Some(two_hours),
-                extend: true
+                extend: true,
+                lid: false
             }
         );
         assert_eq!(
             command(&["start"]),
             Command::Start {
                 duration: None,
-                extend: false
+                extend: false,
+                lid: false
             }
         );
         assert_eq!(
@@ -90,6 +136,41 @@ mod tests {
             Command::Status { watch: true }
         );
         assert_eq!(command(&["daemon"]), Command::Daemon);
+    }
+
+    #[test]
+    fn parses_the_step_2_commands() {
+        let two_hours = HumanDuration::from_secs(7_200);
+        assert_eq!(
+            command(&["start", "2h", "--lid"]),
+            Command::Start {
+                duration: Some(two_hours),
+                extend: false,
+                lid: true
+            }
+        );
+        assert_eq!(command(&["recover"]), Command::Recover);
+        assert_eq!(command(&["install"]), Command::Install { yes: false });
+        assert_eq!(
+            command(&["uninstall", "--yes"]),
+            Command::Uninstall { yes: true }
+        );
+        assert_eq!(
+            command(&["debug", "simulate-lid", "close"]),
+            Command::Debug {
+                command: DebugCommand::SimulateLid {
+                    state: LidArg::Close
+                }
+            }
+        );
+        assert_eq!(
+            command(&["debug", "simulate-lid", "open"]),
+            Command::Debug {
+                command: DebugCommand::SimulateLid {
+                    state: LidArg::Open
+                }
+            }
+        );
     }
 
     #[test]

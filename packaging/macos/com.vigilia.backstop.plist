@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Registered by the service at session start and removed at session end; never installed
+     by hand. Kept in sync with the macOS backstop generator in vigilia-platform. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.vigilia.backstop</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__PROGRAM__</string>
+		<string>recover</string>
+	</array>
+	<key>StartInterval</key>
+	<integer>300</integer>
+</dict>
+</plist>

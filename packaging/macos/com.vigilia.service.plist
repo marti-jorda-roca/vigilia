@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Installed by `vigilia install` as ~/Library/LaunchAgents/com.vigilia.service.plist with
+     __PROGRAM__ replaced by the vigilia binary path and __SOCKET__ by the socket path.
+     Kept in sync with vigilia_daemon::install::service_plist. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.vigilia.service</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__PROGRAM__</string>
+		<string>daemon</string>
+	</array>
+	<key>Sockets</key>
+	<dict>
+		<key>Listeners</key>
+		<dict>
+			<key>SockPathName</key>
+			<string>__SOCKET__</string>
+			<key>SockFamily</key>
+			<string>Unix</string>
+		</dict>
+	</dict>
+	<key>ProcessType</key>
+	<string>Background</string>
+</dict>
+</plist>

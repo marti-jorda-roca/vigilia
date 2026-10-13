@@ -6,7 +6,7 @@ use serde_json::{Map, Value};
 
 use crate::context::Scope;
 use crate::duration::HumanDuration;
-use crate::event::EventKind;
+use crate::event::{EventKind, LidState};
 
 /// One request from a client. `id` is echoed in the response; `v` is the protocol version the
 /// client speaks.
@@ -36,6 +36,9 @@ pub enum Call {
     /// After a successful response, matching events are streamed on the same connection.
     #[serde(rename = "subscribe")]
     Subscribe(SubscribeParams),
+    /// Pretends the lid opened or closed (`vigilia debug simulate-lid`). Admin only.
+    #[serde(rename = "debug.simulate_lid")]
+    DebugSimulateLid(SimulateLidParams),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -51,6 +54,11 @@ pub struct SessionStartParams {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SessionExtendParams {
     pub duration: HumanDuration,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SimulateLidParams {
+    pub state: LidState,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -70,6 +78,7 @@ impl Call {
             Call::SessionStop {} => "session.stop",
             Call::SessionStatus {} => "session.status",
             Call::Subscribe(_) => "subscribe",
+            Call::DebugSimulateLid(_) => "debug.simulate_lid",
         }
     }
 
@@ -81,6 +90,7 @@ impl Call {
             Call::SessionStart(_) | Call::SessionExtend(_) | Call::SessionStop {} => {
                 Some(Scope::SessionControl)
             }
+            Call::DebugSimulateLid(_) => Some(Scope::Admin),
         }
     }
 }
@@ -242,6 +252,9 @@ mod tests {
             Call::SessionStatus {},
             Call::Subscribe(SubscribeParams {
                 filter: vec![EventKind::SessionChanged],
+            }),
+            Call::DebugSimulateLid(SimulateLidParams {
+                state: crate::LidState::Closed,
             }),
         ];
         for (i, call) in calls.into_iter().enumerate() {

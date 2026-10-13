@@ -36,11 +36,21 @@ pub enum SessionState {
 /// What this OS and machine support, so clients can hide what isn't available.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "a capability list is a set of independent flags by nature"
+)]
 pub struct Capabilities {
     /// Prevent idle sleep while the lid is open.
     pub keep_awake_idle: bool,
     /// Keep running with the lid closed.
     pub keep_awake_lid_closed: bool,
+    /// Lid open/close events are available.
+    pub lid_events: bool,
+    /// Battery and heat change events are available.
+    pub power_events: bool,
+    /// A crash-recovery backstop job can be registered during a session.
+    pub backstop: bool,
     /// The service was started by the OS on the first connection (launchd / systemd).
     pub socket_activation: bool,
 }

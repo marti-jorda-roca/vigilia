@@ -2,7 +2,7 @@
 //! so it only runs on demand, on macOS:
 //!
 //! ```sh
-//! cargo test -p vigilia-cli --test binary -- --ignored
+//! cargo test -p vigilia --test binary -- --ignored
 //! ```
 #![cfg(target_os = "macos")]
 

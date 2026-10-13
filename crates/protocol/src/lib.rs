@@ -16,9 +16,10 @@ mod response;
 
 pub use context::{ClientContext, Origin, Scope, ScopeParseError, ScopeSet};
 pub use duration::{DurationParseError, HumanDuration};
-pub use event::{Event, EventKind};
+pub use event::{Event, EventKind, LidState, PowerSnapshot, ThermalLevel};
 pub use request::{
-    Call, Request, RequestParseError, SessionExtendParams, SessionStartParams, SubscribeParams,
+    Call, Request, RequestParseError, SessionExtendParams, SessionStartParams, SimulateLidParams,
+    SubscribeParams,
 };
 pub use response::{
     CallResult, Capabilities, Empty, ErrorBody, ErrorCode, HelloResult, Response, ServerMessage,

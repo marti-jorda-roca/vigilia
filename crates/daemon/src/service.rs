@@ -8,13 +8,16 @@ use std::time::{Duration, Instant};
 use chrono::{DateTime, Utc};
 use tokio::sync::{mpsc, oneshot};
 use vigilia_core::{
-    ActionError, ActionId, ActionKind, Clock, Config, Journal, SessionError, SessionMachine,
-    UndoRecord,
+    ActionError, ActionId, ActionKind, Clock, Config, Journal, RuleAction, SessionError,
+    SessionMachine, UndoRecord,
 };
-use vigilia_platform::{Capabilities, DeadlineTimer, Platform, PlatformError, TimerFired};
+use vigilia_platform::{
+    BACKSTOP_INTERVAL, Capabilities, DeadlineTimer, Platform, PlatformError, TimerFired,
+};
 use vigilia_protocol::{
-    ClientContext, ErrorBody, ErrorCode, Event, EventKind, HelloResult, HumanDuration,
-    PROTOCOL_VERSION, Request, Session, SessionExtendParams, SessionStartParams,
+    ClientContext, ErrorBody, ErrorCode, Event, EventKind, HelloResult, HumanDuration, LidState,
+    PROTOCOL_VERSION, PowerSnapshot, Request, Session, SessionExtendParams, SessionStartParams,
+    SessionState,
 };
 
 use crate::bus::{Bus, Subscription};
@@ -23,6 +26,15 @@ use crate::dispatch::{Dispatched, dispatch};
 /// A deadline this close counts as reached, so jitter between clocks can't cause an extra
 /// wake-up a few microseconds later.
 const DEADLINE_SLACK: Duration = Duration::from_millis(50);
+
+/// The next item on an optional event channel; pending forever when there is none, and
+/// pending again after it closes so a dead event source can't spin the loop.
+async fn recv_opt<T>(rx: &mut Option<tokio::sync::mpsc::UnboundedReceiver<T>>) -> Option<T> {
+    match rx {
+        Some(rx) => rx.recv().await,
+        None => std::future::pending().await,
+    }
+}
 
 pub struct Deps {
     pub platform: Arc<dyn Platform>,
@@ -82,6 +94,10 @@ pub struct Service {
     capabilities: Capabilities,
     /// The journaled keep-awake action of the current session.
     awake: Option<(ActionId, UndoRecord)>,
+    /// The journaled backstop job of the current session, if one was registered.
+    backstop: Option<(ActionId, UndoRecord)>,
+    lid_rx: Option<tokio::sync::mpsc::UnboundedReceiver<LidState>>,
+    power_rx: Option<tokio::sync::mpsc::UnboundedReceiver<PowerSnapshot>>,
     last_activity: Instant,
     armed: Option<DateTime<Utc>>,
 }
@@ -112,6 +128,8 @@ impl Service {
             socket_activation: socket_activated,
             ..platform.capabilities()
         };
+        let lid_rx = platform.lid_events();
+        let power_rx = platform.power_events();
         let now = clock.now();
         Self {
             platform,
@@ -123,6 +141,9 @@ impl Service {
             machine: SessionMachine::new(),
             capabilities,
             awake: None,
+            backstop: None,
+            lid_rx,
+            power_rx,
             last_activity: now.mono,
             armed: None,
         }
@@ -130,6 +151,10 @@ impl Service {
 
     /// Handles requests and deadlines until the service should exit. On a signal or a closed
     /// channel, a running session is ended through the journal first.
+    #[expect(
+        clippy::cognitive_complexity,
+        reason = "one select loop with a branch per event source; each branch is linear"
+    )]
     pub async fn run(
         mut self,
         mut rx: mpsc::Receiver<Msg>,
@@ -148,6 +173,16 @@ impl Service {
                     let _ = reply.send(dispatch(&mut self, &ctx, req));
                 }
                 () = self.bus.subscriber_left() => self.touch(),
+                lid = recv_opt(&mut self.lid_rx) => {
+                    if let Some(state) = lid {
+                        self.on_lid(state);
+                    }
+                }
+                power = recv_opt(&mut self.power_rx) => {
+                    if let Some(snapshot) = power {
+                        self.on_power(snapshot);
+                    }
+                }
                 Some(()) = fired.recv() => {
                     self.armed = None;
                     if self.on_deadline() {
@@ -206,9 +241,88 @@ impl Service {
                 return Err(action_error(e));
             }
         }
-        tracing::info!(id = %session.id, ends_at = ?session.ends_at, "session started");
+        if let Err(e) = self.register_backstop(p.lid_closed_awake) {
+            // Roll the keep-awake action back out through the journal.
+            if let Some((id, rec)) = self.awake.clone() {
+                let platform = &self.platform;
+                let _ = self.journal.undo(id, || platform.release_awake(&rec));
+                self.awake = None;
+            }
+            self.machine.discard();
+            return Err(e);
+        }
+        tracing::info!(id = %session.id, ends_at = ?session.ends_at, lid_closed_awake = p.lid_closed_awake, "session started");
         self.publish_session(Some(session.clone()));
+        // A floor already breached ends the session straight away, through the normal undo.
+        if let Some(snapshot) = self.platform.power_snapshot()
+            && !vigilia_core::rules::evaluate(&snapshot, &self.config.rules).is_empty()
+        {
+            self.on_power(snapshot);
+            return Ok(self.machine.current().cloned().unwrap_or(Session {
+                state: SessionState::Ended,
+                ..session
+            }));
+        }
         Ok(session)
+    }
+
+    /// Journals and registers the backstop job for this session. Unsupported platforms skip
+    /// it, except for lid-closed sessions, where it is the crash-safety guarantee.
+    fn register_backstop(&mut self, required: bool) -> Result<(), ErrorBody> {
+        let program = std::env::current_exe().unwrap_or_else(|_| "vigilia".into());
+        let platform = &self.platform;
+        match self.journal.apply(ActionKind::Backstop, None, || {
+            platform.register_backstop(&program, BACKSTOP_INTERVAL)
+        }) {
+            Ok(applied) => {
+                self.backstop = Some(applied);
+                Ok(())
+            }
+            Err(ActionError::Os(PlatformError::Unsupported(_))) if !required => {
+                tracing::info!("no backstop on this platform; skipping");
+                Ok(())
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "could not register the backstop");
+                Err(action_error(e))
+            }
+        }
+    }
+
+    /// A lid event (real or simulated): published on the bus for later lid actions.
+    pub(crate) fn on_lid(&mut self, state: LidState) {
+        tracing::info!(?state, "lid changed");
+        self.bus.publish(Event::LidChanged { state });
+    }
+
+    /// `vigilia debug simulate-lid`: the same path as a real lid event.
+    pub(crate) fn simulate_lid(&mut self, state: LidState) {
+        self.on_lid(state);
+    }
+
+    /// A power/thermal event: published, then the rules are evaluated. This is the only
+    /// place rules run — there is no polling timer for them.
+    pub(crate) fn on_power(&mut self, power: PowerSnapshot) {
+        self.bus.publish(Event::PowerChanged { power });
+        let active = self
+            .machine
+            .current()
+            .is_some_and(|s| s.state == SessionState::Active);
+        if !active {
+            return;
+        }
+        if let Some(RuleAction::EndSession { reason }) =
+            vigilia_core::rules::evaluate(&power, &self.config.rules)
+                .into_iter()
+                .next()
+        {
+            tracing::warn!(%reason, "rule ended the session");
+            self.bus.publish(Event::Warning {
+                kind: "rule".into(),
+                detail: reason,
+            });
+            let _ = self.end_session();
+        }
     }
 
     pub(crate) fn extend(&mut self, p: SessionExtendParams) -> Result<Session, ErrorBody> {
@@ -237,6 +351,17 @@ impl Service {
                 Err(e) => failure = Some(e.to_string()),
             }
         }
+        // The backstop goes away only once sleep is restored; while an undo has failed it
+        // stays, so `vigilia recover` can finish the job after a crash.
+        if failure.is_none()
+            && let Some((id, rec)) = self.backstop.clone()
+        {
+            let platform = &self.platform;
+            match self.journal.undo(id, || platform.unregister_backstop(&rec)) {
+                Ok(()) => self.backstop = None,
+                Err(e) => failure = Some(e.to_string()),
+            }
+        }
         let session = self
             .machine
             .finish_end(failure.is_none())
@@ -247,7 +372,7 @@ impl Service {
             Some(detail) => {
                 tracing::error!(id = %session.id, %detail, "session needs attention");
                 self.bus.publish(Event::NeedsAttention {
-                    detail: format!("could not release the keep-awake assertion: {detail}"),
+                    detail: format!("could not undo the session's changes: {detail}"),
                 });
             }
         }

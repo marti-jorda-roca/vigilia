@@ -2,8 +2,8 @@
 
 use chrono::{DateTime, Utc};
 use vigilia_protocol::{
-    Call, ErrorBody, ErrorCode, HumanDuration, Session, SessionExtendParams, SessionStartParams,
-    SessionState,
+    Call, Empty, ErrorBody, ErrorCode, HumanDuration, LidState, Session, SessionExtendParams,
+    SessionStartParams, SessionState, SimulateLidParams,
 };
 
 use crate::client::Client;
@@ -14,10 +14,25 @@ pub fn start(
     client: &mut Client,
     duration: Option<HumanDuration>,
 ) -> Result<Option<Session>, CliError> {
+    start_lid(client, duration, false)
+}
+
+/// Like [`start`], with `lid` asking to also stay awake with the lid closed.
+pub fn start_lid(
+    client: &mut Client,
+    duration: Option<HumanDuration>,
+    lid: bool,
+) -> Result<Option<Session>, CliError> {
     client.session(Call::SessionStart(SessionStartParams {
         duration,
-        lid_closed_awake: false,
+        lid_closed_awake: lid,
     }))
+}
+
+/// Pretends the lid moved (`vigilia debug simulate-lid`).
+pub fn simulate_lid(client: &mut Client, state: LidState) -> Result<(), CliError> {
+    client.call::<Empty>(Call::DebugSimulateLid(SimulateLidParams { state }))?;
+    Ok(())
 }
 
 /// `start --extend`: makes sure a session runs for at least `duration` from now. Starts one if
@@ -26,13 +41,23 @@ pub fn start_or_extend(
     client: &mut Client,
     duration: HumanDuration,
 ) -> Result<Option<Session>, CliError> {
-    match start(client, Some(duration)) {
+    start_or_extend_lid(client, duration, false)
+}
+
+/// [`start_or_extend`] for a session that may also stay awake with the lid closed. A running
+/// session keeps the lid behaviour it was started with.
+pub fn start_or_extend_lid(
+    client: &mut Client,
+    duration: HumanDuration,
+    lid: bool,
+) -> Result<Option<Session>, CliError> {
+    match start_lid(client, Some(duration), lid) {
         Err(CliError::Refused(e)) if e.code == ErrorCode::SessionActive => {}
         other => return other,
     }
     // A session ending between two calls is settled by one more start.
     let Some(session) = status(client)? else {
-        return start(client, Some(duration));
+        return start_lid(client, Some(duration), lid);
     };
     if session.state != SessionState::Active {
         return Err(not_active(&session));
@@ -42,7 +67,7 @@ pub fn start_or_extend(
     };
     match extend(client, shortfall) {
         Err(CliError::Refused(e)) if e.code == ErrorCode::NoSession => {
-            start(client, Some(duration))
+            start_lid(client, Some(duration), lid)
         }
         other => other,
     }

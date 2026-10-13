@@ -3,17 +3,19 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.94"
 license = "Apache-2.0"
 repository = "https://github.com/marti-jorda-roca/vigilia"
 
 [workspace.dependencies]
-vigilia-protocol = { path = "crates/protocol" }
-vigilia-core = { path = "crates/core" }
-vigilia-platform = { path = "crates/platform" }
-vigilia-daemon = { path = "crates/daemon" }
+# Internal crates carry a version as well as a path: crates.io rejects
+# path-only dependencies, and `cargo publish` strips the path.
+vigilia-protocol = { version = "0.2.0", path = "crates/protocol" }
+vigilia-core = { version = "0.2.0", path = "crates/core" }
+vigilia-platform = { version = "0.2.0", path = "crates/platform" }
+vigilia-daemon = { version = "0.2.0", path = "crates/daemon" }
 
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 clap = { version = "4.6", features = ["derive"] }
