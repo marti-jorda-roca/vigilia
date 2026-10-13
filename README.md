@@ -2,17 +2,8 @@
 
 Keep your laptop awake for a set time, from the terminal or from a coding agent, and pay almost nothing in battery for it.
 
-```sh
-vigilia start 2h             # keep the Mac awake for 2 hours
-vigilia start                # keep it awake until `vigilia stop`
-vigilia status --watch       # live countdown; Ctrl-C to quit
-vigilia extend 30m           # add 30 minutes to the running session
-vigilia stop                 # end it now and let the Mac sleep again
+<p align="center"><img src="docs/assets/demo.gif" alt="Terminal demo: vigilia start 2h, extend 30m, start 3h --extend, then stop" width="720"></p>
 
-vigilia start 3h --extend    # in scripts and agents: start a session, or make the running one last at least 3h
-vigilia start 4h --lid       # also stay awake with the lid closed (needs `vigilia install` first)
-vigilia status --json        # the session as JSON, for scripts
-```
 For more details, see the [CLI documentation](docs/cli.md).
 
 ## Install
