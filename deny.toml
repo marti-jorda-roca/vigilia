@@ -1,0 +1,35 @@
+# cargo-deny configuration. CI runs `cargo deny check advisories` on every
+# push and pull request; licenses/bans/sources are checked locally with
+# `cargo deny check` (cargo install cargo-deny).
+[advisories]
+yanked = "deny"
+# Scope for non-vulnerability advisories: which crates they are reported for.
+# One of "all", "workspace", "transitive", "none" (not a severity level).
+unsound = "workspace"
+unmaintained = "all"
+
+[licenses]
+# Single SPDX identifiers only; expressions such as "MIT OR Apache-2.0"
+# are not accepted here and are covered by listing each identifier.
+allow = [
+  "Apache-2.0",
+  "MIT",
+  "MPL-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-DFS-2016",
+  "Unicode-3.0",
+  "Zlib",
+  "CC0-1.0",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
