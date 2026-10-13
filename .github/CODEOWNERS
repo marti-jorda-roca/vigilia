@@ -1,0 +1,11 @@
+# Default owner for everything. CODEOWNERS review is required on `main`.
+* @marti-jorda-roca
+
+# Security-sensitive areas: privileged install, socket transport, macOS FFI,
+# packaging, and CI/release. Explicitly listed so they stay covered even if
+# the default above changes.
+/crates/platform/src/macos/ @marti-jorda-roca
+/crates/daemon/src/install.rs @marti-jorda-roca
+/crates/daemon/src/transports/ @marti-jorda-roca
+/packaging/ @marti-jorda-roca
+/.github/workflows/ @marti-jorda-roca

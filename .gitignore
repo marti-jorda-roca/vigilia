@@ -1,2 +1,26 @@
 /target
 .DS_Store
+
+# Secrets and local credentials — never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+id_rsa*
+id_ed25519*
+credentials*
+*.secret
+secrets/
+
+# Local tooling and editor state
+.idea/
+.vscode/
+*.swp
+*~
+
+# Vigilia runtime state if run from the repo root
+*.log
