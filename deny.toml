@@ -3,15 +3,18 @@
 # `cargo deny check` (cargo install cargo-deny).
 [advisories]
 yanked = "deny"
-unsound = "warn"
-unmaintained = "warn"
+# Scope for non-vulnerability advisories: which crates they are reported for.
+# One of "all", "workspace", "transitive", "none" (not a severity level).
+unsound = "workspace"
+unmaintained = "all"
 
 [licenses]
+# Single SPDX identifiers only; expressions such as "MIT OR Apache-2.0"
+# are not accepted here and are covered by listing each identifier.
 allow = [
   "Apache-2.0",
   "MIT",
-  "MIT OR Apache-2.0",
-  "Apache-2.0 OR MIT",
+  "MPL-2.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
   "ISC",
