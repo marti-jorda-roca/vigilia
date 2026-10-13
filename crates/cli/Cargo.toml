@@ -1,10 +1,13 @@
 [package]
-name = "vigilia-cli"
-description = "The vigilia command: a client for the service, and the service itself"
+name = "vigilia"
+description = "Keep your laptop awake for a set time, from the terminal or from a coding agent"
+keywords = ["macos", "sleep", "caffeinate", "keep-awake", "cli"]
+categories = ["command-line-utilities"]
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "vigilia"

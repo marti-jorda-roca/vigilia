@@ -1,0 +1,80 @@
+name: Release
+
+# Publishing a GitHub Release publishes every workspace crate to crates.io,
+# so anyone can install the command with `cargo install vigilia`.
+#
+# One-time setup (see "Releasing" in README.md): add a crates.io API token
+# with publish scopes as the repository secret CARGO_REGISTRY_TOKEN.
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+jobs:
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # rust-toolchain.toml pins the version and components; rustup installs it on first use.
+      - run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check the registry token is configured
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "::error::CARGO_REGISTRY_TOKEN secret is not set; see 'Releasing' in README.md."
+            exit 1
+          fi
+
+      - name: Check the release tag matches the crate version
+        run: |
+          version="$(cargo metadata --format-version 1 --no-deps \
+            | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "vigilia"))')"
+          tag="${GITHUB_REF_NAME#v}"
+          echo "release tag: $GITHUB_REF_NAME, crate version: $version"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Release tag '$GITHUB_REF_NAME' does not match crate version '$version'. Tag the release 'v$version'."
+            exit 1
+          fi
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      # Internal crates must be published before the crates that depend on
+      # them, and each one must be visible in the index before the next
+      # publish can resolve it. Versions that are already published are
+      # skipped, so re-running a failed release is safe.
+      - name: Publish crates in dependency order
+        run: |
+          set -euo pipefail
+          version="$(cargo metadata --format-version 1 --no-deps \
+            | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "vigilia"))')"
+          for crate in vigilia-protocol vigilia-core vigilia-platform vigilia-daemon vigilia; do
+            url="https://crates.io/api/v1/crates/$crate/$version"
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' -A 'vigilia-release-workflow' "$url")" = "200" ]; then
+              echo "$crate $version is already published, skipping."
+              continue
+            fi
+            echo "Publishing $crate $version"
+            cargo publish --locked -p "$crate"
+            for _ in $(seq 1 30); do
+              if [ "$(curl -s -o /dev/null -w '%{http_code}' -A 'vigilia-release-workflow' "$url")" = "200" ]; then
+                break
+              fi
+              sleep 10
+            done
+          done
+
+      - name: Verify the published command installs
+        run: cargo install vigilia --locked --root "$RUNNER_TEMP/vigilia-install" && "$RUNNER_TEMP/vigilia-install/bin/vigilia" --version

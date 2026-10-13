@@ -1092,7 +1092,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vigilia-cli"
+name = "vigilia"
 version = "0.2.0"
 dependencies = [
  "chrono",

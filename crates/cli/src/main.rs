@@ -1,8 +1,8 @@
 use std::process::ExitCode;
 
 use clap::Parser;
-use vigilia_cli::Cli;
+use vigilia::Cli;
 
 fn main() -> ExitCode {
-    vigilia_cli::run(Cli::parse())
+    vigilia::run(Cli::parse())
 }
