@@ -26,6 +26,32 @@ This puts a single `vigilia` binary in `~/.cargo/bin`. Make sure that directory 
 
 For lid-closed sessions, run `vigilia install` once: it shows a narrow sudoers rule (only `pmset disablesleep 1/0`) and asks before installing it, along with the socket-activated service LaunchAgent and a run-once-at-login `vigilia recover` job. `vigilia uninstall` removes them.
 
+### Menu bar app
+
+The menu bar app in `apps/macos` shows the countdown next to the clock and lets you start, extend and end sessions with the mouse. It talks to the same service as the CLI, so a session started in one shows up in the other. There is no downloadable app yet, so you build it from source. It needs macOS 13 or later, the Swift toolchain from Xcode or the Command Line Tools (`xcode-select --install`), and the CLI installed as above.
+
+1. Install the service so the app can start it when needed:
+
+   ```sh
+   vigilia install
+   ```
+
+   It shows the sudoers rule for lid-closed sessions and asks before installing anything. If you don't need lid-closed sessions, run `vigilia install --skip-sudoers` instead.
+
+2. Build the app and start it in the background:
+
+   ```sh
+   cd apps/macos
+   swift build -c release
+   nohup .build/release/Vigilia >/dev/null 2>&1 &
+   ```
+
+The app has no Dock icon. Click the lantern in the menu bar to open it; it is lit while a session keeps the Mac awake. Leave the timeout empty to stay awake until you hold the end button, or set one (`2h`, `45m`) to see the time left next to the lantern. Quitting the app (Quit in its menu) leaves a running session alone.
+
+Without `vigilia install`, the app can still show sessions you start from the CLI, but it can't start the service itself. To let it, run it with `VIGILIA_BIN="$(command -v vigilia)"` set.
+
+A binary built this way isn't an app bundle, so launch at login and in-app setup stay disabled in Settings. They need the packaged app, which isn't available yet.
+
 ## Layout
 
 | Crate | What it holds |
