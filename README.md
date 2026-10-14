@@ -52,6 +52,45 @@ Without `vigilia install`, the app can still show sessions you start from the CL
 
 A binary built this way isn't an app bundle, so launch at login and in-app setup stay disabled in Settings. They need the packaged app, which isn't available yet.
 
+### Uninstall
+
+To remove the menu bar app:
+
+1. Quit it from its menu (Quit), or from a terminal:
+
+   ```sh
+   pkill -f .build/release/Vigilia
+   ```
+
+   Quitting doesn't end a running session. Run `vigilia stop` first if you want that too.
+
+2. Delete the build and the app's saved preferences:
+
+   ```sh
+   rm -rf apps/macos/.build
+   defaults delete Vigilia
+   ```
+
+The app installs nothing else: it isn't in Applications, isn't a login item, and has no LaunchAgent of its own.
+
+To remove Vigilia completely, also remove the service and the CLI:
+
+```sh
+vigilia stop                                     # end any session; restores normal sleep
+vigilia uninstall                                # LaunchAgents and the sudoers rule
+rm -rf ~/Library/Application\ Support/vigilia    # config, journal, logs, socket
+cargo uninstall vigilia                          # the CLI binary
+```
+
+`vigilia uninstall` shows what it removes and asks first; add `--skip-sudoers` to keep the sudoers rule.
+
+If you ever ran `packaging/macos/install-dev.sh` from an early development checkout, you may also have an older LaunchAgent named `vigilia.daemon`. It listens on the same socket as the current service, and the two can block each other so commands hang. Remove it with:
+
+```sh
+launchctl unload ~/Library/LaunchAgents/vigilia.daemon.plist
+rm ~/Library/LaunchAgents/vigilia.daemon.plist
+```
+
 ## Layout
 
 | Crate | What it holds |
