@@ -82,6 +82,7 @@ private struct StartView: View {
     @AppStorage(Preferences.lidClosedByDefault) private var lidClosedByDefault = false
     @State private var lidClosed: Bool?
     @State private var timeout = ""
+    @State private var timeoutHovered = false
     @FocusState private var timeoutFocused: Bool
 
     private static let chips = ["30m", "1h", "2h", "4h"]
@@ -114,7 +115,8 @@ private struct StartView: View {
                 .onSubmit(start)
                 .padding(.horizontal, Pixel.unit * 4)
                 .padding(.vertical, Pixel.unit * 3)
-                .background(PixelBox(border: timeoutFocused ? Pixel.orange : Pixel.ink))
+                .background(PixelBox(border: timeoutFocused || timeoutHovered ? Pixel.orange : Pixel.ink))
+                .onHover { timeoutHovered = $0 }
                 .accessibilityLabel("Timeout")
             HStack(spacing: Pixel.unit * 3) {
                 ForEach(Self.chips, id: \.self) { chip in
@@ -151,8 +153,8 @@ private struct StartView: View {
                             .toggleStyle(PixelToggleStyle())
                             .disabled(true)
                         Spacer()
-                        Button(action: openSettings) { PixelText("SET UP", color: Pixel.orange) }
-                            .buttonStyle(PixelButtonStyle(kind: .plain))
+                        Button(action: openSettings) { PixelText("SET UP") }
+                            .buttonStyle(PixelButtonStyle(kind: .accent))
                     }
                 }
             }
@@ -263,8 +265,8 @@ private struct WarningRow: View {
             PixelText("!", color: Pixel.orange)
             Text(warning.detail).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
-            Button(action: dismiss) { PixelText("X", color: Pixel.dim) }
-                .buttonStyle(PixelButtonStyle(kind: .plain))
+            Button(action: dismiss) { PixelText("X") }
+                .buttonStyle(PixelButtonStyle(kind: .subtle))
                 .accessibilityLabel("Dismiss")
         }
     }

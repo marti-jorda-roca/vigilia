@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The pixel-art look of `docs/assets/vigilia-banner.svg`: white pixels on black, with the
@@ -154,9 +155,23 @@ struct PixelHeading: View {
 
 // MARK: - Controls
 
-/// Buttons as pixel boxes. Pressing inverts them, like a selected item in an old game menu.
+/// Buttons as pixel boxes. The pointer over one turns it orange (or yellow, for the orange
+/// primary button) at once, like the highlighted item of an old game menu, and pressing inverts
+/// it. Disabled buttons don't react.
 struct PixelButtonStyle: ButtonStyle {
-    enum Kind { case normal, primary, plain }
+    enum Kind {
+        /// White box, white text.
+        case normal
+        /// Orange box with dark text: the main action.
+        case primary
+        /// Text only, white.
+        case plain
+        /// Text only, orange: a link to somewhere else.
+        case accent
+        /// Text only, dim: minor actions such as dismissing a warning.
+        case subtle
+    }
+
     var kind: Kind = .normal
 
     func makeBody(configuration: Configuration) -> some View {
@@ -167,31 +182,43 @@ struct PixelButtonStyle: ButtonStyle {
         let configuration: Configuration
         let kind: Kind
         @Environment(\.isEnabled) private var isEnabled
+        @State private var hovering = false
+
+        private var boxed: Bool { kind == .normal || kind == .primary }
 
         var body: some View {
             let pressed = configuration.isPressed
             let (border, fill, ink): (Color, Color, Color) = {
                 switch kind {
                 case .primary:
-                    return (Pixel.orange, pressed ? Pixel.yellow : Pixel.orange, Pixel.background)
+                    let fill = pressed ? Pixel.ink : (hovering ? Pixel.yellow : Pixel.orange)
+                    return (fill, fill, Pixel.background)
                 case .normal:
-                    return (Pixel.ink, pressed ? Pixel.ink : Pixel.background, pressed ? Pixel.background : Pixel.ink)
+                    if pressed { return (Pixel.ink, Pixel.ink, Pixel.background) }
+                    let edge = hovering ? Pixel.orange : Pixel.ink
+                    return (edge, Pixel.background, edge)
                 case .plain:
-                    return (.clear, .clear, pressed ? Pixel.orange : Pixel.ink)
+                    return (.clear, .clear, pressed ? Pixel.yellow : (hovering ? Pixel.orange : Pixel.ink))
+                case .accent:
+                    return (.clear, .clear, pressed ? Pixel.ink : (hovering ? Pixel.yellow : Pixel.orange))
+                case .subtle:
+                    return (.clear, .clear, pressed ? Pixel.yellow : (hovering ? Pixel.orange : Pixel.dim))
                 }
             }()
             configuration.label
                 .environment(\.pixelInk, ink)
-                .padding(.horizontal, kind == .plain ? 0 : Pixel.unit * 4)
-                .padding(.vertical, kind == .plain ? Pixel.unit : Pixel.unit * 3)
+                .padding(.horizontal, boxed ? Pixel.unit * 4 : 0)
+                .padding(.vertical, boxed ? Pixel.unit * 3 : Pixel.unit)
                 .background(PixelBox(border: border, fill: fill))
                 .opacity(isEnabled ? 1 : 0.45)
                 .contentShape(Rectangle())
+                .pixelHover($hovering)
         }
     }
 }
 
-/// A pixel checkbox: a box that fills orange when on.
+/// A pixel checkbox: a box that fills orange when on. Like the buttons, it turns orange under
+/// the pointer.
 struct PixelToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         PixelToggle(configuration: configuration)
@@ -200,6 +227,7 @@ struct PixelToggleStyle: ToggleStyle {
     private struct PixelToggle: View {
         let configuration: Configuration
         @Environment(\.isEnabled) private var isEnabled
+        @State private var hovering = false
 
         var body: some View {
             Button {
@@ -207,20 +235,57 @@ struct PixelToggleStyle: ToggleStyle {
             } label: {
                 HStack(spacing: Pixel.unit * 4) {
                     ZStack {
-                        PixelBox()
+                        PixelBox(border: hovering ? Pixel.orange : Pixel.ink)
                         if configuration.isOn {
-                            Rectangle().fill(Pixel.orange).padding(Pixel.unit * 2)
+                            Rectangle().fill(hovering ? Pixel.yellow : Pixel.orange).padding(Pixel.unit * 2)
                         }
                     }
                     .frame(width: Pixel.unit * 7, height: Pixel.unit * 7)
                     configuration.label
+                        .environment(\.pixelInk, hovering ? Pixel.orange : Pixel.ink)
                 }
                 .opacity(isEnabled ? 1 : 0.45)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .pixelHover($hovering)
             .accessibilityValue(configuration.isOn ? "on" : "off")
         }
+    }
+}
+
+/// Tracks the pointer over a control: sets `hovering` and shows the pointing-hand cursor while
+/// it is inside, so a pixel box reads as something to click. Disabled controls don't react.
+private struct PixelHover: ViewModifier {
+    @Binding var hovering: Bool
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var cursorPushed = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { inside in update(inside && isEnabled) }
+            .onChange(of: isEnabled) { enabled in
+                if !enabled { update(false) }
+            }
+            // A button can go away under the pointer (Start swaps the menu's content).
+            .onDisappear { update(false) }
+    }
+
+    private func update(_ inside: Bool) {
+        hovering = inside
+        if inside, !cursorPushed {
+            NSCursor.pointingHand.push()
+            cursorPushed = true
+        } else if !inside, cursorPushed {
+            NSCursor.pop()
+            cursorPushed = false
+        }
+    }
+}
+
+extension View {
+    func pixelHover(_ hovering: Binding<Bool>) -> some View {
+        modifier(PixelHover(hovering: hovering))
     }
 }
 

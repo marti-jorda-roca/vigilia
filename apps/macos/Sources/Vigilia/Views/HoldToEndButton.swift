@@ -8,19 +8,22 @@ struct HoldToEndButton: View {
 
     @State private var progress: CGFloat = 0
     @State private var holding = false
+    @State private var hovering = false
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         ZStack {
-            PixelBox(border: Pixel.red)
+            // Under the pointer the box warms up, so it reads as a button before the press.
+            PixelBox(border: hovering ? Pixel.orange : Pixel.red, fill: hovering ? Pixel.red.opacity(0.25) : Pixel.background)
             BlockFill(progress: progress)
                 .fill(Pixel.red)
                 .padding(Pixel.unit * 2)
-            PixelText(holding ? "KEEP HOLDING" : title)
+            PixelText(holding ? "KEEP HOLDING" : title, color: hovering && !holding ? Pixel.yellow : Pixel.ink)
         }
         .frame(height: Pixel.unit * 14)
         .opacity(isEnabled ? 1 : 0.45)
         .contentShape(Rectangle())
+        .pixelHover($hovering)
         .onLongPressGesture(minimumDuration: 1, maximumDistance: 30) {
             progress = 0
             holding = false
