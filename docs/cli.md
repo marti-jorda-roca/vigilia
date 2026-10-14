@@ -81,7 +81,7 @@ Undoes anything a crashed session left behind and restores normal sleep. It take
 <user> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0
 ```
 
-`uninstall` removes all of it, including any backstop job. If `disablesleep` is still on (for example because the service was unloaded mid-session), it sets it back to `0` before removing the rule, so lid-closed sleep works again.
+`uninstall` removes all of it, including any backstop job. Before removing the rule it undoes and deletes the recovery journal, and if `disablesleep` is still on (for example because the service was unloaded mid-session) it sets it back to `0`, so lid-closed sleep works again. If a service started outside launchd is still running, `uninstall` stops before removing the rule and asks you to run it again once the service exits.
 
 ### `vigilia debug simulate-lid close|open`
 

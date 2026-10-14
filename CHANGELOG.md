@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `vigilia uninstall` clears a leftover `pmset disablesleep 1` before removing
-  the sudoers rule, so the Mac sleeps with the lid closed again.
+- `vigilia uninstall` undoes and deletes the recovery journal and clears a
+  leftover `pmset disablesleep 1` before removing the sudoers rule, so the Mac
+  sleeps with the lid closed again.
 
 ## [0.2.0] - 2026-10-13
 

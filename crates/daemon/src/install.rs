@@ -125,12 +125,12 @@ pub fn install(program: &Path, user: &str, paths: &Paths) -> Result<Vec<String>,
     Ok(done)
 }
 
-/// Removes the `LaunchAgents` (including any backstop) and the sudoers rule. If
-/// `disablesleep` is still on, it is cleared first: unloading the service ends any session
-/// without its restore, and once the rule is gone nothing can clear the flag, so the Mac
-/// would stay awake with the lid closed.
+/// Removes the `LaunchAgents` (including any backstop) and the sudoers rule. Before the
+/// rule goes, it replays and deletes the journal and clears a `disablesleep` still on:
+/// unloading the service ends any session without its restore, and once the rule is gone
+/// nothing can clear the flag, so the Mac would stay awake with the lid closed.
 #[cfg(target_os = "macos")]
-pub fn uninstall() -> Result<Vec<String>, String> {
+pub fn uninstall(paths: &Paths) -> Result<Vec<String>, String> {
     let dir = launch_agents_dir();
     let mut done = Vec::new();
     for label in [
@@ -146,6 +146,22 @@ pub fn uninstall() -> Result<Vec<String>, String> {
             done.push(format!("removed LaunchAgent {label}"));
         }
     }
+    let outcome = crate::recover::recover_and_clear(paths, vigilia_platform::native())
+        .map_err(|e| e.to_string())?;
+    if outcome.already_running {
+        return Err(
+            "a vigilia service is still running; end any session with `vigilia stop` \
+             and run `vigilia uninstall` again once the service exits"
+                .into(),
+        );
+    }
+    done.push(match outcome.failed {
+        0 => format!("cleared the journal ({} actions undone)", outcome.undone),
+        failed => format!(
+            "cleared the journal ({} actions undone, {failed} could not be undone)",
+            outcome.undone
+        ),
+    });
     if vigilia_platform::macos::sleep_disabled().map_err(|e| e.to_string())? {
         let status = std::process::Command::new("/usr/bin/sudo")
             .args(["/usr/bin/pmset", "-a", "disablesleep", "0"])
@@ -173,7 +189,7 @@ pub fn install(_program: &Path, _user: &str, _paths: &Paths) -> Result<Vec<Strin
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn uninstall() -> Result<Vec<String>, String> {
+pub fn uninstall(_paths: &Paths) -> Result<Vec<String>, String> {
     Err("`vigilia uninstall` is only supported on macOS for now".into())
 }
 
