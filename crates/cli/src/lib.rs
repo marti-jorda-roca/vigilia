@@ -76,6 +76,13 @@ fn recover() -> u8 {
     }
 }
 
+/// The user's paths, with their directories created.
+fn user_paths() -> std::io::Result<vigilia_core::Paths> {
+    let paths = vigilia_core::Paths::for_user()?;
+    paths.create_dirs()?;
+    Ok(paths)
+}
+
 /// Shows what would be installed and asks, unless `--yes`; then installs or uninstalls.
 fn install(yes: bool, uninstall: bool) -> u8 {
     use std::io::Write;
@@ -104,20 +111,17 @@ fn install(yes: bool, uninstall: bool) -> u8 {
             return 0;
         }
     }
-    let result = if uninstall {
-        vigilia_daemon::install::uninstall()
-    } else {
-        let paths = match vigilia_core::Paths::for_user() {
-            Ok(paths) => paths,
-            Err(e) => {
-                let _ = writeln!(std::io::stderr().lock(), "vigilia install: {e}");
-                return exit::UNREACHABLE;
-            }
-        };
-        if let Err(e) = paths.create_dirs() {
-            let _ = writeln!(std::io::stderr().lock(), "vigilia install: {e}");
+    let paths = match user_paths() {
+        Ok(paths) => paths,
+        Err(e) => {
+            let command = if uninstall { "uninstall" } else { "install" };
+            let _ = writeln!(std::io::stderr().lock(), "vigilia {command}: {e}");
             return exit::UNREACHABLE;
         }
+    };
+    let result = if uninstall {
+        vigilia_daemon::install::uninstall(&paths)
+    } else {
         let program = std::env::current_exe().unwrap_or_else(|_| "vigilia".into());
         vigilia_daemon::install::install(&program, &user, &paths)
     };

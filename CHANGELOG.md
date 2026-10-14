@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Open-source project files: `CONTRIBUTING.md`, `SECURITY.md`,
   `CODE_OF_CONDUCT.md`, issue/PR templates, `CODEOWNERS`, and Dependabot.
 
+### Fixed
+
+- `vigilia uninstall` undoes and deletes the recovery journal and clears a
+  leftover `pmset disablesleep 1` before removing the sudoers rule, so the Mac
+  sleeps with the lid closed again. It also stops a service started outside
+  launchd, which used to keep its session running after uninstall.
+- `vigilia install` stops a service already running instead of leaving it
+  unreachable behind launchd's socket.
+
 ## [0.2.0] - 2026-10-13
 
 ### Added

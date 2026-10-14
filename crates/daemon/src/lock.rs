@@ -30,9 +30,42 @@ pub fn try_acquire(path: &Path) -> io::Result<Option<InstanceLock>> {
     Ok(Some(InstanceLock { _file: file }))
 }
 
+/// Whether another process holds the lock right now.
+pub fn is_held(path: &Path) -> io::Result<bool> {
+    Ok(try_acquire(path)?.is_none())
+}
+
+/// The pid the current holder wrote into the lock file, if it is readable. Unix only: on
+/// Windows the lock is mandatory, so the file cannot be read while another handle holds it.
+#[cfg(unix)]
+pub fn holder_pid(path: &Path) -> Option<u32> {
+    std::fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_held_while_a_lock_is_alive() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vigilia.lock");
+        assert!(!is_held(&path).unwrap());
+        let held = try_acquire(&path).unwrap().unwrap();
+        assert!(is_held(&path).unwrap());
+        drop(held);
+        assert!(!is_held(&path).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_holder_writes_its_pid() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vigilia.lock");
+        assert_eq!(holder_pid(&path), None);
+        let _held = try_acquire(&path).unwrap().unwrap();
+        assert_eq!(holder_pid(&path), Some(std::process::id()));
+    }
 
     #[test]
     fn second_acquire_fails_until_the_first_is_dropped() {

@@ -75,13 +75,13 @@ Undoes anything a crashed session left behind and restores normal sleep. It take
 
 ### `vigilia install` / `vigilia uninstall`
 
-`install` (macOS) shows the sudoers rule below and asks for confirmation (skip with `--yes`), then installs the socket-activated service LaunchAgent, the run-once-at-login `recover` job, and the rule as `/etc/sudoers.d/vigilia`. The rule covers exactly two commands:
+`install` (macOS) shows the sudoers rule below and asks for confirmation (skip with `--yes`), stops a service already running (launchd takes over its socket path, which would leave it unreachable; this ends its session), then installs the socket-activated service LaunchAgent, the run-once-at-login `recover` job, and the rule as `/etc/sudoers.d/vigilia`. The rule covers exactly two commands:
 
 ```
 <user> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0
 ```
 
-`uninstall` removes all of it, including any backstop job.
+`uninstall` removes all of it, including any backstop job. Before removing the rule it undoes and deletes the recovery journal, and if `disablesleep` is still on (for example because the service was unloaded mid-session) it sets it back to `0`, so lid-closed sleep works again. A service still running after the LaunchAgent is unloaded (for example one started with `vigilia daemon`) is stopped first: `SIGTERM` so it ends its session itself, then `SIGKILL` if it has not exited after 5 seconds. The pid comes from the lock file, and `uninstall` only signals it if that process is the `vigilia` binary.
 
 ### `vigilia debug simulate-lid close|open`
 

@@ -85,12 +85,14 @@ fn launchctl(args: &[&str]) -> Result<(), String> {
 }
 
 /// Installs the `LaunchAgents` and the sudoers rule (via `sudo install`). Returns what was
-/// done, for the CLI to print.
+/// done, for the CLI to print. A service already running is stopped first: launchd takes
+/// over its socket path, which would leave it running with no way to reach it.
 #[cfg(target_os = "macos")]
 pub fn install(program: &Path, user: &str, paths: &Paths) -> Result<Vec<String>, String> {
     let dir = launch_agents_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let mut done = Vec::new();
+    done.extend(stop_running_service(paths)?);
     for (label, contents) in [
         (SERVICE_LABEL, service_plist(program, &paths.socket)),
         (RECOVER_LABEL, recover_plist(program)),
@@ -125,9 +127,75 @@ pub fn install(program: &Path, user: &str, paths: &Paths) -> Result<Vec<String>,
     Ok(done)
 }
 
-/// Removes the `LaunchAgents` (including any backstop) and the sudoers rule.
+/// Whether `ps -o comm=` output names the vigilia binary, so a stale pid in the lock file
+/// that now belongs to another program is never signalled.
+pub fn is_vigilia_command(comm: &str) -> bool {
+    Path::new(comm.trim()).file_name() == Some(std::ffi::OsStr::new("vigilia"))
+}
+
 #[cfg(target_os = "macos")]
-pub fn uninstall() -> Result<Vec<String>, String> {
+fn process_is_vigilia(pid: u32) -> bool {
+    std::process::Command::new("/bin/ps")
+        .args(["-o", "comm=", "-p", &pid.to_string()])
+        .output()
+        .is_ok_and(|out| {
+            out.status.success() && is_vigilia_command(&String::from_utf8_lossy(&out.stdout))
+        })
+}
+
+/// Polls until the instance lock is free or `timeout` passes.
+#[cfg(target_os = "macos")]
+fn wait_for_lock_release(paths: &Paths, timeout: std::time::Duration) -> Result<bool, String> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if !crate::lock::is_held(&paths.lock).map_err(|e| e.to_string())? {
+            return Ok(true);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Ok(false);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+/// Stops a service that holds the instance lock: before `install`, which would orphan it,
+/// and in `uninstall` once the `LaunchAgents` are gone, where one launchd is still shutting
+/// down or one started outside launchd would keep its session running after the sudoers
+/// rule is removed. SIGTERM lets it end the session and restore `disablesleep` itself;
+/// SIGKILL is the fallback, and the next journal replay undoes what it left.
+#[cfg(target_os = "macos")]
+fn stop_running_service(paths: &Paths) -> Result<Option<String>, String> {
+    use std::time::Duration;
+    if wait_for_lock_release(paths, Duration::from_secs(2))? {
+        return Ok(None);
+    }
+    let pid = crate::lock::holder_pid(&paths.lock)
+        .ok_or("the vigilia lock is held but names no process; stop the service and try again")?;
+    if !process_is_vigilia(pid) {
+        return Err(format!(
+            "pid {pid} holds the vigilia lock but is not vigilia; stop it and try again"
+        ));
+    }
+    for (signal, wait) in [
+        ("-TERM", Duration::from_secs(5)),
+        ("-KILL", Duration::from_secs(2)),
+    ] {
+        let _ = std::process::Command::new("/bin/kill")
+            .args([signal, &pid.to_string()])
+            .status();
+        if wait_for_lock_release(paths, wait)? {
+            return Ok(Some(format!("stopped the running service (pid {pid})")));
+        }
+    }
+    Err(format!("the vigilia service (pid {pid}) did not stop"))
+}
+
+/// Removes the `LaunchAgents` (including any backstop) and the sudoers rule. Before the
+/// rule goes, it stops a service still running, replays and deletes the journal, and clears
+/// a `disablesleep` still on: once the rule is gone nothing can clear the flag, so the Mac
+/// would stay awake with the lid closed.
+#[cfg(target_os = "macos")]
+pub fn uninstall(paths: &Paths) -> Result<Vec<String>, String> {
     let dir = launch_agents_dir();
     let mut done = Vec::new();
     for label in [
@@ -142,6 +210,31 @@ pub fn uninstall() -> Result<Vec<String>, String> {
             std::fs::remove_file(&path).map_err(|e| e.to_string())?;
             done.push(format!("removed LaunchAgent {label}"));
         }
+    }
+    done.extend(stop_running_service(paths)?);
+    let outcome = crate::recover::recover_and_clear(paths, vigilia_platform::native())
+        .map_err(|e| e.to_string())?;
+    if outcome.already_running {
+        return Err("a vigilia service started again while uninstalling; \
+             run `vigilia uninstall` again"
+            .into());
+    }
+    done.push(match outcome.failed {
+        0 => format!("cleared the journal ({} actions undone)", outcome.undone),
+        failed => format!(
+            "cleared the journal ({} actions undone, {failed} could not be undone)",
+            outcome.undone
+        ),
+    });
+    if vigilia_platform::macos::sleep_disabled().map_err(|e| e.to_string())? {
+        let status = std::process::Command::new("/usr/bin/sudo")
+            .args(["/usr/bin/pmset", "-a", "disablesleep", "0"])
+            .status()
+            .map_err(|e| e.to_string())?;
+        if !status.success() {
+            return Err("clearing pmset disablesleep failed".into());
+        }
+        done.push("restored lid-closed sleep (pmset disablesleep was 1)".into());
     }
     let status = std::process::Command::new("/usr/bin/sudo")
         .args(["/bin/rm", "-f", SUDOERS_PATH])
@@ -160,7 +253,7 @@ pub fn install(_program: &Path, _user: &str, _paths: &Paths) -> Result<Vec<Strin
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn uninstall() -> Result<Vec<String>, String> {
+pub fn uninstall(_paths: &Paths) -> Result<Vec<String>, String> {
     Err("`vigilia uninstall` is only supported on macOS for now".into())
 }
 
@@ -186,6 +279,15 @@ mod tests {
         assert!(text.contains(RECOVER_LABEL));
         assert!(text.contains("<string>recover</string>"));
         assert!(text.contains("<key>RunAtLoad</key>"));
+    }
+
+    #[test]
+    fn only_the_vigilia_binary_counts_as_the_service() {
+        assert!(is_vigilia_command("/Users/me/.cargo/bin/vigilia\n"));
+        assert!(is_vigilia_command("vigilia"));
+        assert!(!is_vigilia_command("/usr/bin/vigilia-other"));
+        assert!(!is_vigilia_command("/bin/zsh"));
+        assert!(!is_vigilia_command(""));
     }
 
     #[test]

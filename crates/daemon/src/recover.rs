@@ -26,11 +26,35 @@ pub struct RecoverOutcome {
 pub fn recover(paths: &Paths, platform: Arc<dyn Platform>) -> io::Result<RecoverOutcome> {
     let Some(_lock) = lock::try_acquire(&paths.lock)? else {
         tracing::info!("another instance holds the lock; nothing to recover");
-        return Ok(RecoverOutcome {
-            already_running: true,
-            ..RecoverOutcome::default()
-        });
+        return Ok(already_running());
     };
+    replay(paths, &platform)
+}
+
+/// Recovers like [`recover`], then deletes the journal, under the same lock. For
+/// `vigilia uninstall`: once the sudoers rule is gone, a later replay could not restore
+/// `disablesleep`, so actions whose undo failed are dropped rather than kept for a retry.
+pub fn recover_and_clear(paths: &Paths, platform: Arc<dyn Platform>) -> io::Result<RecoverOutcome> {
+    let Some(_lock) = lock::try_acquire(&paths.lock)? else {
+        return Ok(already_running());
+    };
+    let outcome = replay(paths, &platform)?;
+    match std::fs::remove_file(&paths.journal) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+        _ => {}
+    }
+    Ok(outcome)
+}
+
+fn already_running() -> RecoverOutcome {
+    RecoverOutcome {
+        already_running: true,
+        ..RecoverOutcome::default()
+    }
+}
+
+/// Replays the journal; the caller holds the lock.
+fn replay(paths: &Paths, platform: &Arc<dyn Platform>) -> io::Result<RecoverOutcome> {
     let mut journal = Journal::open(&paths.journal)?;
     let report = journal.replay(|action| platform.restore(action))?;
     for action in &report.undone {
@@ -99,6 +123,40 @@ mod tests {
         assert!(Journal::open(&paths.journal).unwrap().pending().is_empty());
         assert!(!platform.sleep_disabled());
         assert!(!platform.backstop_registered());
+    }
+
+    #[test]
+    fn clearing_deletes_the_journal_even_when_an_undo_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::in_dir(dir.path().to_path_buf());
+        paths.create_dirs().unwrap();
+        let platform = FakePlatform::new();
+        Journal::open(&paths.journal)
+            .unwrap()
+            .apply(ActionKind::KeepAwake, None, || {
+                Ok::<_, Infallible>(UndoRecord::LidClosedAwake {
+                    pid: 999_999,
+                    assertion_id: 7,
+                    sleep_was_disabled: false,
+                })
+            })
+            .unwrap();
+        platform.fail_release(true);
+        let outcome = recover_and_clear(&paths, Arc::new(platform)).unwrap();
+        assert_eq!(outcome.failed, 1);
+        assert!(!paths.journal.exists());
+    }
+
+    #[test]
+    fn clearing_leaves_a_running_service_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::in_dir(dir.path().to_path_buf());
+        paths.create_dirs().unwrap();
+        Journal::open(&paths.journal).unwrap();
+        let _held = lock::try_acquire(&paths.lock).unwrap().unwrap();
+        let outcome = recover_and_clear(&paths, Arc::new(FakePlatform::new())).unwrap();
+        assert!(outcome.already_running);
+        assert!(paths.journal.exists());
     }
 
     #[test]
