@@ -27,4 +27,6 @@ secrets/
 
 # Swift package (apps/macos)
 apps/macos/.build/
+apps/macos/dist/
+*.dmg
 .swiftpm/

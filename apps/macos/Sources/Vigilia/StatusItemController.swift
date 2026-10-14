@@ -12,6 +12,7 @@ import os
 @MainActor
 final class StatusItemController: NSObject {
     private let store: SessionStore
+    private let setup: SetupModel
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let panel = MenuPanel()
     private var hosting: NSHostingController<AnyView>!
@@ -26,11 +27,12 @@ final class StatusItemController: NSObject {
     private var redraws = 0
     private let log = Logger(subsystem: "com.vigilia.app", category: "status-item")
 
-    init(store: SessionStore, openSettings: @escaping () -> Void) {
+    init(store: SessionStore, setup: SetupModel, openSettings: @escaping () -> Void) {
         self.store = store
+        self.setup = setup
         super.init()
 
-        let menu = MenuView(store: store) { [weak self] in
+        let menu = MenuView(store: store, setup: setup) { [weak self] in
             self?.closeMenu()
             openSettings()
         }
@@ -82,6 +84,7 @@ final class StatusItemController: NSObject {
 
     func openMenu() {
         store.menuOpened()
+        setup.refresh()
         contentSize = hosting.sizeThatFits(in: CGSize(width: 10_000, height: 10_000))
         hosting.view.layoutSubtreeIfNeeded()
         place()

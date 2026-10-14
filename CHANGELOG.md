@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- macOS menu bar app (`apps/macos`): a countdown next to the clock, start / extend /
+  hold to end, battery and heat settings, and recovery warnings.
+- The menu bar app as a universal `Vigilia-<version>.dmg` on each GitHub release, built
+  by `apps/macos/scripts/build-app.sh`. It is signed and notarized when the release
+  secrets are set, and ad-hoc signed otherwise.
+- In-app setup: installs the service and, with the admin password dialog, the lid-closed
+  sudoers rule and a `/usr/local/bin/vigilia` link. It offers to repair the service when
+  the app moves, and uninstalls it all again.
+- `vigilia config get/set`, `[rules] end_at_critical_heat`, and `--skip-sudoers` for
+  `install` / `uninstall`.
 - Open-source project files: `CONTRIBUTING.md`, `SECURITY.md`,
   `CODE_OF_CONDUCT.md`, issue/PR templates, `CODEOWNERS`, and Dependabot.
 

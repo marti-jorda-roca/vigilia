@@ -35,7 +35,6 @@ final class SessionStore: ObservableObject {
     /// The last call that failed, shown in the menu until the next one.
     @Published private(set) var lastError: String?
     @Published private(set) var busy = false
-    @Published private(set) var setup = SetupStatus.detect()
     @Published private(set) var menuOpen = false
     private var settingsOpen = false
 
@@ -73,7 +72,6 @@ final class SessionStore: ObservableObject {
 
     func menuOpened() {
         menuOpen = true
-        setup = SetupStatus.detect()
         Task { await refresh(spawn: false) }
     }
 
@@ -85,7 +83,6 @@ final class SessionStore: ObservableObject {
 
     func settingsOpened() {
         settingsOpen = true
-        setup = SetupStatus.detect()
         Task {
             await refresh(spawn: true)
             await perform { client in

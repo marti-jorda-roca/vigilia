@@ -5,6 +5,7 @@ import VigiliaProtocol
 /// The menu under the lantern.
 struct MenuView: View {
     @ObservedObject var store: SessionStore
+    @ObservedObject var setup: SetupModel
     let openSettings: () -> Void
 
     var body: some View {
@@ -19,7 +20,7 @@ struct MenuView: View {
             if let session = store.session, session.state != .needsAttention {
                 SessionView(store: store, session: session)
             } else if store.session == nil {
-                StartView(store: store, openSettings: openSettings)
+                StartView(store: store, setup: setup, openSettings: openSettings)
             }
             if let error = store.lastError {
                 Text(error)
@@ -78,6 +79,7 @@ private struct Header: View {
 
 private struct StartView: View {
     @ObservedObject var store: SessionStore
+    @ObservedObject var setup: SetupModel
     let openSettings: () -> Void
     @AppStorage(Preferences.lidClosedByDefault) private var lidClosedByDefault = false
     @State private var lidClosed: Bool?
@@ -88,7 +90,7 @@ private struct StartView: View {
     private static let chips = ["30m", "1h", "2h", "4h"]
 
     private var lidAvailable: Bool {
-        store.capabilities.keepAwakeLidClosed && store.setup.sudoersInstalled
+        store.capabilities.keepAwakeLidClosed && setup.status.sudoersInstalled
     }
 
     private var lidChoice: Binding<Bool> {

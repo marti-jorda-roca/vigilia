@@ -5,12 +5,10 @@ import VigiliaProtocol
 
 struct SettingsView: View {
     @ObservedObject var store: SessionStore
+    @ObservedObject var setup: SetupModel
     @AppStorage(Preferences.lidClosedByDefault) private var lidClosedByDefault = false
     @State private var launchAtLogin = LoginItem.enabled
     @State private var loginError: String?
-    @State private var copied = false
-
-    private static let setupCommand = "vigilia install"
 
     var body: some View {
         VStack(alignment: .leading, spacing: Pixel.unit * 10) {
@@ -44,9 +42,9 @@ struct SettingsView: View {
             if store.capabilities.keepAwakeLidClosed {
                 Section(title: "LID") {
                     Toggle(isOn: $lidClosedByDefault) { PixelText("LID CLOSED BY DEFAULT") }
-                        .disabled(!store.setup.sudoersInstalled)
-                    if !store.setup.sudoersInstalled {
-                        Text("Lid-closed sessions need a one-time setup. Until in-app setup is available, run `vigilia install` in Terminal.")
+                        .disabled(!setup.status.sudoersInstalled)
+                    if !setup.status.sudoersInstalled {
+                        Text("Lid-closed sessions need a one-time setup, under Setup below.")
                             .foregroundColor(Pixel.dim)
                     }
                 }
@@ -74,20 +72,8 @@ struct SettingsView: View {
                 }
             }
 
-            Section(title: "SERVICE") {
-                Row(label: "SERVICE", value: serviceStatus)
-                Row(label: "LID SETUP", value: store.setup.sudoersInstalled ? "set up" : "not set up")
-                // In-app setup comes with the packaged app. Until then, the buttons hand over the
-                // command to run in Terminal.
-                HStack(spacing: Pixel.unit * 4) {
-                    Button(action: copySetupCommand) {
-                        PixelText(copied ? "COPIED" : setupAction.title)
-                    }
-                    .help("Copy `\(Self.setupCommand)` to run in Terminal.")
-                    Spacer()
-                }
-                .buttonStyle(PixelButtonStyle())
-                Text(setupAction.explanation).foregroundColor(Pixel.dim)
+            Section(title: "SETUP") {
+                SetupSection(setup: setup, sessionLive: store.session != nil)
             }
 
             Section(title: "ABOUT") {
@@ -106,16 +92,148 @@ struct SettingsView: View {
         .pixelSurface()
     }
 
-    private var setupAction: (title: String, explanation: String) {
-        let setup = store.setup
-        let run = "Run `\(Self.setupCommand)` in Terminal"
-        if setup.needsRepair {
-            return ("REPAIR", "The service points at a program that moved. \(run) to fix it; the button copies the command.")
+    private static var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    }
+}
+
+/// Installing the service and the lid-closed rule from the app, and removing them again. Only a
+/// packaged app in Applications sets anything up: the LaunchAgent stores the helper's path.
+private struct SetupSection: View {
+    @ObservedObject var setup: SetupModel
+    let sessionLive: Bool
+    @State private var copied = false
+
+    private static let setupCommand = "vigilia install"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Pixel.unit * 5) {
+            switch setup.location {
+            case .notBundled:
+                terminalFallback
+            case .translocated, .elsewhere:
+                moveToApplications
+            case .applications:
+                steps
+            }
+            if let error = setup.error {
+                Text(error).foregroundColor(Pixel.red)
+            }
         }
-        if setup.agentInstalled, setup.sudoersInstalled {
-            return ("REINSTALL", "The service and lid-closed sessions are set up. \(run) again to reinstall; the button copies the command.")
+        .buttonStyle(PixelButtonStyle())
+        .disabled(setup.busy)
+    }
+
+    // MARK: Packaged app in Applications
+
+    @ViewBuilder private var steps: some View {
+        let status = setup.status
+        Row(label: "SERVICE", value: serviceState)
+        Text(serviceExplanation).foregroundColor(Pixel.dim)
+        HStack {
+            Button { setup.installService() } label: {
+                PixelText(!status.agentInstalled ? "INSTALL" : status.needsRepair ? "REPAIR" : "REINSTALL")
+            }
+            Spacer()
         }
-        return ("SET UP", "\(run) to install the service and lid-closed sessions; the button copies the command.")
+
+        Row(label: "LID CLOSED", value: status.sudoersInstalled ? "set up" : "not set up")
+        if status.sudoersInstalled {
+            Text("Sessions can keep the Mac awake with the lid closed. Removing asks for your password.")
+                .foregroundColor(Pixel.dim)
+        } else {
+            Text("To keep the Mac awake with the lid closed, Vigilia needs this rule in /etc/sudoers.d/vigilia. It asks for your password once, and also puts `vigilia` in /usr/local/bin for Terminal.")
+                .foregroundColor(Pixel.dim)
+            Text(SudoersRule.text(user: NSUserName()))
+                .font(.system(size: 10, design: .monospaced))
+                .textSelection(.enabled)
+        }
+        HStack {
+            if status.sudoersInstalled {
+                Button { setup.removeLidSetup() } label: { PixelText("REMOVE…") }
+            } else {
+                Button { setup.installLidSetup() } label: { PixelText("SET UP…") }
+            }
+            Spacer()
+        }
+
+        PixelRule(color: Pixel.faint)
+        HStack {
+            Button { setup.uninstall() } label: { PixelText("UNINSTALL") }
+                .disabled(sessionLive || !somethingInstalled)
+            Spacer()
+        }
+        Text(uninstallExplanation).foregroundColor(Pixel.dim)
+    }
+
+    private var somethingInstalled: Bool {
+        let status = setup.status
+        return status.agentInstalled || status.sudoersInstalled || status.cliLinked
+    }
+
+    private var serviceState: String {
+        let status = setup.status
+        if !status.agentInstalled { return "not installed" }
+        if status.needsRepair { return "needs repair" }
+        return "installed"
+    }
+
+    private var serviceExplanation: String {
+        let status = setup.status
+        guard let program = status.agentProgram else {
+            return "Lets Vigilia start the service when it's needed and undo a session's changes after a restart. No password needed."
+        }
+        if !status.agentProgramExists {
+            return "The service points at a program that is gone (\(program)). Repair points it at this app."
+        }
+        if status.needsRepair {
+            return "The service runs another copy of vigilia (\(program)). Repair points it at this app."
+        }
+        return "The service starts when it's needed and stops when idle."
+    }
+
+    private var uninstallExplanation: String {
+        if setup.uninstalled, !somethingInstalled {
+            return "Removed. Drag Vigilia to the Trash to finish."
+        }
+        if sessionLive {
+            return "End the session first."
+        }
+        return "Removes the service, the lid-closed rule and the Terminal link. Then drag Vigilia to the Trash."
+    }
+
+    // MARK: Not in Applications
+
+    @ViewBuilder private var moveToApplications: some View {
+        Text(setup.location == .translocated
+            ? "Vigilia is running straight from the download. Drag it into Applications and open it from there: the service remembers where its program is."
+            : "Move Vigilia to Applications first, and open it from there: the service remembers where its program is.")
+            .foregroundColor(Pixel.dim)
+        HStack {
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+            } label: {
+                PixelText("SHOW IN FINDER")
+            }
+            .disabled(setup.location == .translocated)
+            Spacer()
+        }
+    }
+
+    // MARK: Development build (`swift run`)
+
+    /// A binary that isn't an app bundle has no helper to install, so the button hands over the
+    /// command to run in Terminal.
+    @ViewBuilder private var terminalFallback: some View {
+        Row(label: "SERVICE", value: setup.status.agentInstalled ? (setup.status.needsRepair ? "needs repair" : "installed") : "started on demand")
+        Row(label: "LID SETUP", value: setup.status.sudoersInstalled ? "set up" : "not set up")
+        HStack {
+            Button(action: copySetupCommand) { PixelText(copied ? "COPIED" : "COPY COMMAND") }
+                .help("Copy `\(Self.setupCommand)` to run in Terminal.")
+            Spacer()
+        }
+        Text("This build isn't the packaged app, so it can't set anything up. Run `\(Self.setupCommand)` in Terminal; the button copies the command.")
+            .foregroundColor(Pixel.dim)
     }
 
     private func copySetupCommand() {
@@ -126,17 +244,6 @@ struct SettingsView: View {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             copied = false
         }
-    }
-
-    private var serviceStatus: String {
-        let setup = store.setup
-        if !setup.agentInstalled { return "started on demand" }
-        if setup.needsRepair { return "needs repair" }
-        return "installed"
-    }
-
-    private static var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
     }
 }
 
@@ -213,10 +320,12 @@ enum LoginItem {
 @MainActor
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let store: SessionStore
+    private let setup: SetupModel
     private var window: NSWindow?
 
-    init(store: SessionStore) {
+    init(store: SessionStore, setup: SetupModel) {
         self.store = store
+        self.setup = setup
     }
 
     func show() {
@@ -226,6 +335,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         if !window.isVisible {
             window.center()
             store.settingsOpened()
+            setup.refresh()
         }
         window.makeKeyAndOrderFront(nil)
     }
@@ -235,7 +345,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     private func makeWindow() -> NSWindow {
-        let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(store: store)))
+        let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(store: store, setup: setup)))
         window.title = "Vigilia Settings"
         window.styleMask = [.titled, .closable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true

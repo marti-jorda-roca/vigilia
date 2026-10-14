@@ -4,6 +4,7 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var store: SessionStore!
+    private var setup: SetupModel!
     private var statusItem: StatusItemController!
     private var settingsWindow: SettingsWindowController!
     private var doorbell: Doorbell?
@@ -20,12 +21,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_: Notification) {
         let store = SessionStore()
-        let settingsWindow = SettingsWindowController(store: store)
+        let setup = SetupModel()
+        let settingsWindow = SettingsWindowController(store: store, setup: setup)
         self.store = store
+        self.setup = setup
         self.settingsWindow = settingsWindow
-        statusItem = StatusItemController(store: store) { settingsWindow.show() }
+        statusItem = StatusItemController(store: store, setup: setup) { settingsWindow.show() }
         doorbell = Doorbell { store.doorbellRang() }
         store.launched()
+        // First launch, a copy run from a download, or a service whose program is gone.
+        if setup.shouldOfferSetup() {
+            settingsWindow.show()
+        }
         #if DEBUG
             // For screenshots and manual checks without clicking: debug builds only.
             let environment = ProcessInfo.processInfo.environment

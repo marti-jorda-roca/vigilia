@@ -3,6 +3,25 @@
 Budgets (from `docs/plans/architecture-plan.md`): no Vigilia process with no session; at most
 1 wake-up per minute during a session; RSS under 10 MB; no network traffic with remote off.
 
+## Comparing with other keep-awake tools
+
+`scripts/bench-energy.sh` measures what each tool itself costs while it keeps the Mac awake,
+against caffeinate, KeepingYouAwake, Caffeine and Amphetamine, whichever are installed:
+
+```sh
+scripts/bench-energy.sh            # every installed tool, about 1 hour
+scripts/bench-energy.sh --quick    # shorter windows, about 15 minutes
+scripts/bench-energy.sh vigilia amphetamine
+```
+
+For each tool it measures the CPU time, idle wake-ups, energy impact and memory of the tool's
+own processes, first during a session and then with none. It uses `top`, so it needs no sudo.
+Staying awake itself costs the same with every tool, so the numbers show the overhead each
+tool adds on top of that. It refuses to start while a Vigilia session is running, and marks a
+window invalid when the tool holds no sleep assertion during its session or still holds one
+afterwards. Results go to `target/bench-energy/<date>-<time>/summary.md`. `--help` lists the
+options.
+
 ## v0.2 (step 2: lid-closed sessions)
 
 Measured on the development Mac (Apple silicon, macOS) with the release binary

@@ -158,7 +158,7 @@ enum ConnectError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noHelper:
-            "The Vigilia service isn't installed. Run `vigilia install`, or move Vigilia to Applications."
+            "The Vigilia service isn't set up. Move Vigilia to Applications, then set it up in Settings."
         case let .spawnFailed(reason):
             "Could not start the Vigilia service: \(reason)."
         }
