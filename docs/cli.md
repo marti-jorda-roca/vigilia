@@ -137,6 +137,8 @@ vigilia stop
 
 Prefer a duration over a plain `vigilia start` here. A session without an end lasts until something runs `vigilia stop`, so an agent that crashes or forgets to stop keeps the Mac awake indefinitely, while a timed session still ends on its own.
 
+To have Claude Code, Codex or another agent do this automatically on every prompt, see [Using Vigilia with coding agents](agents.md).
+
 ## The service
 
 The CLI is a client. The real work happens in the service, which is the same `vigilia` binary running as `vigilia daemon`.
