@@ -4,8 +4,8 @@
 //! transport goes through here, so remote clients added later get the same checks as local ones.
 
 use vigilia_protocol::{
-    Call, ClientContext, Empty, ErrorBody, ErrorCode, PROTOCOL_VERSION, Request, Response, Session,
-    SessionResult,
+    Call, ClientContext, ConfigResult, Empty, ErrorBody, ErrorCode, PROTOCOL_VERSION, Request,
+    Response, Session, SessionResult,
 };
 
 use crate::bus::Subscription;
@@ -71,6 +71,17 @@ pub fn dispatch(svc: &mut Service, ctx: &ClientContext, req: Request) -> Dispatc
             svc.simulate_lid(p.state);
             Response::ok(id, &Empty {}).into()
         }
+        Call::ConfigGet {} => Response::ok(
+            id,
+            &ConfigResult {
+                config: svc.config_get(),
+            },
+        )
+        .into(),
+        Call::ConfigSet(p) => match svc.config_set(p) {
+            Ok(config) => Response::ok(id, &ConfigResult { config }).into(),
+            Err(e) => Response::err(Some(id), e.code, e.message).into(),
+        },
     }
 }
 
@@ -79,7 +90,8 @@ mod tests {
     use super::*;
     use crate::service::testing::service;
     use vigilia_protocol::{
-        HumanDuration, Scope, SessionExtendParams, SessionStartParams, SubscribeParams,
+        ConfigSetParams, HumanDuration, RulesPatch, Scope, SessionExtendParams, SessionStartParams,
+        SubscribeParams,
     };
 
     fn calls() -> Vec<Call> {
@@ -96,6 +108,13 @@ mod tests {
             Call::SessionStop {},
             Call::DebugSimulateLid(vigilia_protocol::SimulateLidParams {
                 state: vigilia_protocol::LidState::Closed,
+            }),
+            Call::ConfigGet {},
+            Call::ConfigSet(ConfigSetParams {
+                rules: Some(RulesPatch {
+                    battery_floor_percent: Some(20),
+                    end_at_critical_heat: None,
+                }),
             }),
         ]
     }

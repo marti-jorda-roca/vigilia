@@ -26,6 +26,7 @@ struct State {
     fail_release: bool,
     fail_backstop: bool,
     restored: Vec<PendingAction>,
+    announce_count: usize,
     power: PowerSnapshot,
     lid_tx: Option<mpsc::UnboundedSender<LidState>>,
     power_tx: Option<mpsc::UnboundedSender<PowerSnapshot>>,
@@ -46,6 +47,7 @@ impl Default for State {
             fail_release: false,
             fail_backstop: false,
             restored: Vec::new(),
+            announce_count: 0,
             power: PowerSnapshot {
                 battery_percent: Some(100),
                 on_ac: true,
@@ -118,6 +120,11 @@ impl FakePlatform {
     /// Actions passed to [`Platform::restore`], in order.
     pub fn restored(&self) -> Vec<PendingAction> {
         self.0.lock().unwrap().restored.clone()
+    }
+
+    /// How many times [`Platform::announce_session_change`] was called.
+    pub fn announce_count(&self) -> usize {
+        self.0.lock().unwrap().announce_count
     }
 }
 
@@ -236,5 +243,9 @@ impl Platform for FakePlatform {
     fn remove_backstop(&self) -> Result<()> {
         self.0.lock().unwrap().backstop_registered = false;
         Ok(())
+    }
+
+    fn announce_session_change(&self) {
+        self.0.lock().unwrap().announce_count += 1;
     }
 }

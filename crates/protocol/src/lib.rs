@@ -18,12 +18,12 @@ pub use context::{ClientContext, Origin, Scope, ScopeParseError, ScopeSet};
 pub use duration::{DurationParseError, HumanDuration};
 pub use event::{Event, EventKind, LidState, PowerSnapshot, ThermalLevel};
 pub use request::{
-    Call, Request, RequestParseError, SessionExtendParams, SessionStartParams, SimulateLidParams,
-    SubscribeParams,
+    Call, ConfigSetParams, Request, RequestParseError, RulesPatch, SessionExtendParams,
+    SessionStartParams, SimulateLidParams, SubscribeParams,
 };
 pub use response::{
-    CallResult, Capabilities, Empty, ErrorBody, ErrorCode, HelloResult, Response, ServerMessage,
-    Session, SessionResult, SessionState,
+    CallResult, Capabilities, ConfigResult, Empty, ErrorBody, ErrorCode, HelloResult, Response,
+    RuleSettings, ServerMessage, Session, SessionResult, SessionState, Settings,
 };
 
 /// The protocol version this build speaks. Bumped only for incompatible changes.

@@ -27,7 +27,7 @@ pub fn evaluate(power: &PowerSnapshot, config: &RulesConfig) -> Vec<RuleAction> 
             ),
         });
     }
-    if power.thermal == ThermalLevel::Critical {
+    if config.end_at_critical_heat && power.thermal == ThermalLevel::Critical {
         actions.push(RuleAction::EndSession {
             reason: "thermal level is critical".into(),
         });
@@ -65,6 +65,7 @@ mod tests {
     fn a_raised_floor_ends_a_session_above_the_default() {
         let config = RulesConfig {
             battery_floor_percent: 50,
+            ..RulesConfig::default()
         };
         assert_eq!(
             evaluate(&power(Some(42), ThermalLevel::Nominal), &config).len(),
@@ -80,5 +81,19 @@ mod tests {
             1
         );
         assert!(evaluate(&power(Some(80), ThermalLevel::Serious), &config).is_empty());
+    }
+
+    #[test]
+    fn critical_heat_is_ignored_when_the_flag_is_off() {
+        let config = RulesConfig {
+            end_at_critical_heat: false,
+            ..RulesConfig::default()
+        };
+        assert!(evaluate(&power(Some(80), ThermalLevel::Critical), &config).is_empty());
+        // The battery rule still fires.
+        assert_eq!(
+            evaluate(&power(Some(5), ThermalLevel::Critical), &config).len(),
+            1
+        );
     }
 }

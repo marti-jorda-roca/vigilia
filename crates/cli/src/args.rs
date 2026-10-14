@@ -50,17 +50,54 @@ pub enum Command {
     Install {
         #[arg(long)]
         yes: bool,
+        /// Only install the `LaunchAgents`; skip the sudoers rule.
+        #[arg(long)]
+        skip_sudoers: bool,
     },
     /// Remove what `vigilia install` installed.
     Uninstall {
         #[arg(long)]
         yes: bool,
+        /// Only remove the `LaunchAgents`; keep the sudoers rule.
+        #[arg(long)]
+        skip_sudoers: bool,
+    },
+    /// Read or change the service settings.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+    /// Install or remove the sudoers rule. Run as root (hidden; the app drives it
+    /// through the system admin password dialog).
+    #[command(hide = true)]
+    Sudoers {
+        #[command(subcommand)]
+        command: SudoersCommand,
     },
     /// Debugging helpers.
     Debug {
         #[command(subcommand)]
         command: DebugCommand,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+pub enum ConfigCommand {
+    /// Show the current settings.
+    Get,
+    /// Change one setting, e.g. `config set rules.battery_floor_percent 20`.
+    Set { key: String, value: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+pub enum SudoersCommand {
+    /// Write `/etc/sudoers.d/vigilia` for `--user`. Must run as root.
+    Install {
+        #[arg(long)]
+        user: String,
+    },
+    /// Remove `/etc/sudoers.d/vigilia`. Must run as root.
+    Remove,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
@@ -150,10 +187,19 @@ mod tests {
             }
         );
         assert_eq!(command(&["recover"]), Command::Recover);
-        assert_eq!(command(&["install"]), Command::Install { yes: false });
+        assert_eq!(
+            command(&["install"]),
+            Command::Install {
+                yes: false,
+                skip_sudoers: false
+            }
+        );
         assert_eq!(
             command(&["uninstall", "--yes"]),
-            Command::Uninstall { yes: true }
+            Command::Uninstall {
+                yes: true,
+                skip_sudoers: false
+            }
         );
         assert_eq!(
             command(&["debug", "simulate-lid", "close"]),
@@ -169,6 +215,53 @@ mod tests {
                 command: DebugCommand::SimulateLid {
                     state: LidArg::Open
                 }
+            }
+        );
+    }
+
+    #[test]
+    fn parses_the_step_3_commands() {
+        assert_eq!(
+            command(&["install", "--yes", "--skip-sudoers"]),
+            Command::Install {
+                yes: true,
+                skip_sudoers: true
+            }
+        );
+        assert_eq!(
+            command(&["uninstall", "--skip-sudoers"]),
+            Command::Uninstall {
+                yes: false,
+                skip_sudoers: true
+            }
+        );
+        assert_eq!(
+            command(&["config", "get"]),
+            Command::Config {
+                command: ConfigCommand::Get
+            }
+        );
+        assert_eq!(
+            command(&["config", "set", "rules.battery_floor_percent", "20"]),
+            Command::Config {
+                command: ConfigCommand::Set {
+                    key: "rules.battery_floor_percent".into(),
+                    value: "20".into()
+                }
+            }
+        );
+        assert_eq!(
+            command(&["sudoers", "install", "--user", "marti"]),
+            Command::Sudoers {
+                command: SudoersCommand::Install {
+                    user: "marti".into()
+                }
+            }
+        );
+        assert_eq!(
+            command(&["sudoers", "remove"]),
+            Command::Sudoers {
+                command: SudoersCommand::Remove
             }
         );
     }

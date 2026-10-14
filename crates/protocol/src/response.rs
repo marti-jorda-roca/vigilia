@@ -73,6 +73,25 @@ pub struct SessionResult {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Empty {}
 
+/// The rule settings a client can read and change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RuleSettings {
+    pub battery_floor_percent: u8,
+    pub end_at_critical_heat: bool,
+}
+
+/// The settings returned by `config.get` and `config.set`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Settings {
+    pub rules: RuleSettings,
+}
+
+/// Result of `config.get` and `config.set`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ConfigResult {
+    pub config: Settings,
+}
+
 /// The possible `result` shapes. Clients know which one to expect from the method they called;
 /// this type exists for the JSON Schema.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -81,6 +100,7 @@ pub enum CallResult {
     Hello(HelloResult),
     Session(SessionResult),
     Empty(Empty),
+    Config(ConfigResult),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

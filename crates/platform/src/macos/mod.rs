@@ -4,6 +4,7 @@
 mod assertion;
 mod backstop;
 mod events;
+mod notify;
 mod power;
 mod timer;
 
@@ -134,6 +135,10 @@ impl Platform for MacPlatform {
 
     fn remove_backstop(&self) -> Result<()> {
         backstop::remove()
+    }
+
+    fn announce_session_change(&self) {
+        notify::post_session_changed();
     }
 }
 
