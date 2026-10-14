@@ -60,7 +60,7 @@ public enum TransportError: Error, Equatable, Sendable {
                         self.receive()
                     // Network reports a refused or missing socket as `waiting` and would retry
                     // forever; for a local socket that just means the service isn't there.
-                    case let .waiting(error), let .failed(error):
+                    case .waiting(let error), .failed(let error):
                         self.settle(.failure(Self.map(error)))
                         self.sink.finish(throwing: Self.map(error))
                         self.connection.cancel()
@@ -124,7 +124,7 @@ public enum TransportError: Error, Equatable, Sendable {
         }
 
         private static func map(_ error: NWError) -> TransportError {
-            if case let .posix(code) = error, code == .ENOENT || code == .ECONNREFUSED {
+            if case .posix(let code) = error, code == .ENOENT || code == .ECONNREFUSED {
                 return .serviceAbsent
             }
             return .failed(error.localizedDescription)

@@ -14,7 +14,9 @@ struct HoldToEndButton: View {
     var body: some View {
         ZStack {
             // Under the pointer the box warms up, so it reads as a button before the press.
-            PixelBox(border: hovering ? Pixel.orange : Pixel.red, fill: hovering ? Pixel.red.opacity(0.25) : Pixel.background)
+            PixelBox(
+                border: hovering ? Pixel.orange : Pixel.red, fill: hovering ? Pixel.red.opacity(0.25) : Pixel.background
+            )
             BlockFill(progress: progress)
                 .fill(Pixel.red)
                 .padding(Pixel.unit * 2)
@@ -56,7 +58,8 @@ private struct BlockFill: Shape {
         let width = rect.width / CGFloat(blocks)
         var path = Path()
         for i in 0..<filled {
-            path.addRect(CGRect(x: rect.minX + CGFloat(i) * width, y: rect.minY, width: width - Pixel.unit, height: rect.height))
+            path.addRect(
+                CGRect(x: rect.minX + CGFloat(i) * width, y: rect.minY, width: width - Pixel.unit, height: rect.height))
         }
         return path
     }

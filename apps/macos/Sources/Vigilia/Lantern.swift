@@ -78,11 +78,12 @@ enum Lantern {
             return true
         }
         image.isTemplate = state == .unlit
-        image.accessibilityDescription = switch state {
-        case .unlit: "Vigilia"
-        case .lit: "Vigilia: keeping awake"
-        case .alert: "Vigilia needs attention"
-        }
+        image.accessibilityDescription =
+            switch state {
+            case .unlit: "Vigilia"
+            case .lit: "Vigilia: keeping awake"
+            case .alert: "Vigilia needs attention"
+            }
         return image
     }
 }

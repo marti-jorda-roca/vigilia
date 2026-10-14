@@ -248,15 +248,15 @@ final class SessionStore: ObservableObject {
 
     private func handle(_ event: Event) {
         switch event {
-        case let .sessionChanged(session):
+        case .sessionChanged(let session):
             apply(session)
-        case let .warning(kind, detail):
+        case .warning(let kind, let detail):
             guard !warnings.contains(where: { $0.detail == detail }) else { break }
             warnings.append(Warning(kind: kind, detail: detail))
             if warnings.count > 5 { warnings.removeFirst() }
-        case let .needsAttention(detail):
+        case .needsAttention(let detail):
             needsAttention = detail
-        case let .configChanged(config):
+        case .configChanged(let config):
             settings = config
         case .lidChanged, .powerChanged, .unknown:
             break
@@ -282,7 +282,7 @@ final class SessionStore: ObservableObject {
             "The Vigilia service isn't running."
         case ClientError.timedOut:
             "The Vigilia service didn't answer. Check `vigilia status` in Terminal."
-        case let TransportError.failed(reason):
+        case TransportError.failed(let reason):
             "Could not reach the Vigilia service: \(reason)"
         default:
             error.localizedDescription

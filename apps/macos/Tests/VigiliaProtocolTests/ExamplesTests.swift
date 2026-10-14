@@ -39,8 +39,9 @@ struct ExamplesTests {
             let ours = try Request(id: UInt64(id), call: call).encodedLine()
             #expect(try Fixtures.object(ours) == Fixtures.object(wire), "\(call.method)")
         }
-        #expect(Set(requests.map { try! Fixtures.object($0)["method"] as! String })
-            .subtracting(["debug.simulate_lid"]) == Set(Call.methods))
+        #expect(
+            Set(requests.map { try! Fixtures.object($0)["method"] as! String })
+                .subtracting(["debug.simulate_lid"]) == Set(Call.methods))
     }
 
     @Test func responsesDecode() throws {
@@ -70,7 +71,7 @@ struct ExamplesTests {
 
     @Test func eventsDecode() throws {
         let events = try lines(where: { $0["event"] != nil }).map { line -> Event in
-            guard case let .event(event) = try ServerMessage.decode(line) else {
+            guard case .event(let event) = try ServerMessage.decode(line) else {
                 Issue.record("not read as an event")
                 return .unknown("")
             }
@@ -80,7 +81,7 @@ struct ExamplesTests {
         for event in events {
             if case .unknown = event { Issue.record("an example event was not understood") }
         }
-        guard case let .sessionChanged(session?) = events[0] else {
+        guard case .sessionChanged(let session?) = events[0] else {
             Issue.record("expected a session")
             return
         }
@@ -93,16 +94,24 @@ struct ExamplesTests {
             Issue.record("expected needs_attention")
             return
         }
-        #expect(events[6] == .configChanged(Settings(rules: RuleSettings(batteryFloorPercent: 10, endAtCriticalHeat: true))))
+        #expect(
+            events[6] == .configChanged(Settings(rules: RuleSettings(batteryFloorPercent: 10, endAtCriticalHeat: true)))
+        )
     }
 
     @Test func responsesAreToldApartFromEvents() throws {
-        guard case let .response(id, _) = try ServerMessage.decode(Data(#"{"id":3,"ok":true,"result":{"session":null}}"#.utf8)) else {
+        guard
+            case .response(let id, _) = try ServerMessage.decode(
+                Data(#"{"id":3,"ok":true,"result":{"session":null}}"#.utf8))
+        else {
             Issue.record("expected a response")
             return
         }
         #expect(id == 3)
-        guard case let .response(noID, _) = try ServerMessage.decode(Data(#"{"id":null,"ok":false,"error":{"code":"bad_request","message":"x"}}"#.utf8)) else {
+        guard
+            case .response(let noID, _) = try ServerMessage.decode(
+                Data(#"{"id":null,"ok":false,"error":{"code":"bad_request","message":"x"}}"#.utf8))
+        else {
             Issue.record("expected a response")
             return
         }
@@ -112,13 +121,15 @@ struct ExamplesTests {
     // MARK: Values a newer service may send
 
     @Test func unknownEventsAreKept() throws {
-        guard case let .event(event) = try ServerMessage.decode(Data(#"{"event":"agent_said","text":"hi"}"#.utf8)) else {
+        guard case .event(let event) = try ServerMessage.decode(Data(#"{"event":"agent_said","text":"hi"}"#.utf8))
+        else {
             Issue.record("expected an event")
             return
         }
         #expect(event == .unknown("agent_said"))
         // A known tag with a payload this client can't read must not fail the connection.
-        guard case let .event(odd) = try ServerMessage.decode(Data(#"{"event":"lid_changed","state":"ajar"}"#.utf8)) else {
+        guard case .event(let odd) = try ServerMessage.decode(Data(#"{"event":"lid_changed","state":"ajar"}"#.utf8))
+        else {
             Issue.record("expected an event")
             return
         }
@@ -138,7 +149,8 @@ struct ExamplesTests {
     }
 
     @Test func unknownCapabilitiesAreIgnoredAndMissingOnesDefault() throws {
-        let caps = try JSONDecoder().decode(Capabilities.self, from: Data(#"{"keep_awake_idle":true,"mute":true}"#.utf8))
+        let caps = try JSONDecoder().decode(
+            Capabilities.self, from: Data(#"{"keep_awake_idle":true,"mute":true}"#.utf8))
         #expect(caps.keepAwakeIdle)
         #expect(!caps.keepAwakeLidClosed)
     }

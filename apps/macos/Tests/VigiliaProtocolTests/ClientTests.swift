@@ -47,7 +47,7 @@ actor RequestReader {
         iterator = copy
         let line = try #require(next)
         let object = try Fixtures.object(line)
-        return (object["id"] as! Int, object["method"] as! String)
+        return (try #require(object["id"] as? Int), try #require(object["method"] as? String))
     }
 }
 
@@ -66,7 +66,9 @@ struct ClientTests {
         let byMethod = Dictionary(uniqueKeysWithValues: [first, second].map { ($0.method, $0.id) })
 
         // Answer in the opposite order.
-        transport.reply(#"{"id":\#(byMethod["config.get"]!),"ok":true,"result":{"config":{"rules":{"battery_floor_percent":15,"end_at_critical_heat":false}}}}"#)
+        transport.reply(
+            #"{"id":\#(byMethod["config.get"]!),"ok":true,"result":{"config":{"rules":{"battery_floor_percent":15,"end_at_critical_heat":false}}}}"#
+        )
         transport.reply(#"{"id":\#(byMethod["session.status"]!),"ok":true,"result":{"session":\#(session)}}"#)
 
         #expect(try await status?.id == "s1")
@@ -103,7 +105,8 @@ struct ClientTests {
 
         let extended = Task { try await client.extend(seconds: 900) }
         let request = try await requests.next()
-        transport.reply(#"{"id":\#(request.id),"ok":false,"error":{"code":"no_session","message":"no session is running"}}"#)
+        transport.reply(
+            #"{"id":\#(request.id),"ok":false,"error":{"code":"no_session","message":"no session is running"}}"#)
         await #expect(throws: ErrorBody(code: .noSession, message: "no session is running")) {
             try await extended.value
         }

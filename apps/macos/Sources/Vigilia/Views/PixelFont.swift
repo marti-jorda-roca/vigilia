@@ -12,7 +12,7 @@ enum PixelFont {
         var pixels: [CGPoint] = []
         var x = 0
         for (i, character) in text.uppercased().replacingOccurrences(of: "…", with: "...").enumerated() {
-            let rows = glyphs[character] ?? glyphs["?"]!
+            let rows = glyphs[character] ?? glyphs["?"] ?? []
             if i > 0 { x += spacing }
             for (y, row) in rows.enumerated() {
                 for (dx, cell) in row.enumerated() where cell == "#" {

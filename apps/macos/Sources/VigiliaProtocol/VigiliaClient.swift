@@ -137,11 +137,11 @@ public actor VigiliaClient {
         // A line that isn't JSON at all is skipped; the connection stays usable.
         guard let message = try? ServerMessage.decode(line) else { return }
         switch message {
-        case let .event(event):
+        case .event(let event):
             eventSink.yield(event)
-        case let .response(id?, line):
+        case .response(let id?, let line):
             pending.removeValue(forKey: id)?.resume(returning: line)
-        case let .response(nil, line):
+        case .response(nil, let line):
             // The service couldn't read a request at all; there is no telling which one.
             let error: Error
             do {

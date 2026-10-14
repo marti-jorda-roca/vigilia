@@ -3,10 +3,10 @@ import AppKit
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var store: SessionStore!
-    private var setup: SetupModel!
-    private var statusItem: StatusItemController!
-    private var settingsWindow: SettingsWindowController!
+    private var store: SessionStore?
+    private var setup: SetupModel?
+    private var statusItem: StatusItemController?
+    private var settingsWindow: SettingsWindowController?
     private var doorbell: Doorbell?
 
     static func main() {
@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // For screenshots and manual checks without clicking: debug builds only.
             let environment = ProcessInfo.processInfo.environment
             if environment["VIGILIA_DEBUG_OPEN_MENU"] != nil {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.statusItem.openMenu() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.statusItem?.openMenu() }
             }
             if environment["VIGILIA_DEBUG_OPEN_SETTINGS"] != nil {
                 settingsWindow.show()
@@ -47,6 +47,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_: Notification) {
         // Only the socket closes; the session carries on in the service.
-        store.disconnect()
+        store?.disconnect()
     }
 }

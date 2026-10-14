@@ -9,7 +9,7 @@ struct SchemaTests {
     let defs: [String: Any]
 
     init() throws {
-        defs = try Fixtures.schema()["$defs"] as! [String: Any]
+        defs = try #require(try Fixtures.schema()["$defs"] as? [String: Any])
     }
 
     private func properties(_ name: String) -> Set<String> {

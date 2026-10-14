@@ -131,7 +131,9 @@ final class ServiceConnection {
         var pid: pid_t = 0
         let path = helper.path
         let argv: [UnsafeMutablePointer<CChar>?] = [strdup(path), strdup("daemon"), nil]
-        defer { argv.forEach { free($0) } }
+        defer {
+            for arg in argv { free(arg) }
+        }
         let status = posix_spawn(&pid, path, &actions, &attributes, argv, environ)
         guard status == 0 else {
             throw ConnectError.spawnFailed(String(cString: strerror(status)))
@@ -159,7 +161,7 @@ enum ConnectError: Error, LocalizedError {
         switch self {
         case .noHelper:
             "The Vigilia service isn't set up. Move Vigilia to Applications, then set it up in Settings."
-        case let .spawnFailed(reason):
+        case .spawnFailed(let reason):
             "Could not start the Vigilia service: \(reason)."
         }
     }

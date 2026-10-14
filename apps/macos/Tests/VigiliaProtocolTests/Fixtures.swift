@@ -1,4 +1,5 @@
 import Foundation
+import Testing
 
 /// Files from the Rust side of the repo, which defines the protocol.
 enum Fixtures {
@@ -20,10 +21,10 @@ enum Fixtures {
 
     static func schema() throws -> [String: Any] {
         let data = try Data(contentsOf: schemaDir.appendingPathComponent("protocol.schema.json"))
-        return try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
     static func object(_ line: Data) throws -> NSDictionary {
-        try JSONSerialization.jsonObject(with: line) as! NSDictionary
+        try #require(try JSONSerialization.jsonObject(with: line) as? NSDictionary)
     }
 }

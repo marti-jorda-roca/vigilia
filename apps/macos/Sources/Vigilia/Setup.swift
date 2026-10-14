@@ -138,7 +138,8 @@ enum AdminScript {
     }
 
     static func appleScriptString(_ text: String) -> String {
-        let escaped = text
+        let escaped =
+            text
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "\"\(escaped)\""
@@ -160,7 +161,7 @@ enum Installer {
         var errorDescription: String? {
             switch self {
             case .cancelled: "Cancelled."
-            case let .failed(reason): reason
+            case .failed(let reason): reason
             }
         }
     }

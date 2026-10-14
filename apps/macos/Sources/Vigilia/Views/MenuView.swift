@@ -31,8 +31,12 @@ struct MenuView: View {
             HStack {
                 Button(action: openSettings) { PixelText("SETTINGS") }
                 Spacer()
-                Button { NSApp.terminate(nil) } label: { PixelText("QUIT") }
-                    .help("Quit the menu bar app. A running session continues.")
+                Button {
+                    NSApp.terminate(nil)
+                } label: {
+                    PixelText("QUIT")
+                }
+                .help("Quit the menu bar app. A running session continues.")
             }
             .buttonStyle(PixelButtonStyle(kind: .plain))
         }
@@ -138,9 +142,11 @@ private struct StartView: View {
                     Text("Use a duration like 2h, 45m or 1h30m.").foregroundColor(Pixel.red)
                 case .success(nil):
                     Text("Stays awake until you hold to end.").foregroundColor(Pixel.dim)
-                case let .success(seconds?):
-                    Text("Ends at \(Date().addingTimeInterval(TimeInterval(seconds)).formatted(date: .omitted, time: .shortened)).")
-                        .foregroundColor(Pixel.dim)
+                case .success(let seconds?):
+                    Text(
+                        "Ends at \(Date().addingTimeInterval(TimeInterval(seconds)).formatted(date: .omitted, time: .shortened))."
+                    )
+                    .foregroundColor(Pixel.dim)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -176,14 +182,14 @@ private struct StartView: View {
     }
 
     private var startTitle: String {
-        if case let .success(seconds?) = parsed {
+        if case .success(let seconds?) = parsed {
             return "START · " + HumanDuration.format(seconds: seconds)
         }
         return "START"
     }
 
     private func start() {
-        guard case let .success(seconds) = parsed else { return }
+        guard case .success(let seconds) = parsed else { return }
         store.start(duration: seconds, lidClosedAwake: lidAvailable && lidChoice.wrappedValue)
         lidClosed = nil
         timeout = ""
@@ -214,7 +220,9 @@ private struct SessionView: View {
             if session.endsAt != nil {
                 HStack(spacing: Pixel.unit * 3) {
                     ForEach([("+15M", 900), ("+30M", 1_800), ("+1H", 3_600)], id: \.0) { label, seconds in
-                        Button { store.extend(seconds: seconds) } label: {
+                        Button {
+                            store.extend(seconds: seconds)
+                        } label: {
                             PixelText(label).frame(maxWidth: .infinity)
                         }
                         .buttonStyle(PixelButtonStyle())

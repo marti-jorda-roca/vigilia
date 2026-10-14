@@ -24,7 +24,8 @@ struct AppLocationTests {
     }
 
     @Test func notABundle() {
-        #expect(AppLocation.classify(bundlePath: "/Users/ana/vigilia/apps/macos/.build/release", home: home) == .notBundled)
+        #expect(
+            AppLocation.classify(bundlePath: "/Users/ana/vigilia/apps/macos/.build/release", home: home) == .notBundled)
     }
 }
 
@@ -49,7 +50,8 @@ struct AdminScriptTests {
         let script = AdminScript.install(helper: "/Applications/Vigilia.app/Contents/Helpers/vigilia", user: "ana")
         #expect(script.hasPrefix("do shell script \""))
         #expect(script.hasSuffix("\" with administrator privileges"))
-        #expect(script.contains("'/Applications/Vigilia.app/Contents/Helpers/vigilia' sudoers install --user 'ana' && "))
+        #expect(
+            script.contains("'/Applications/Vigilia.app/Contents/Helpers/vigilia' sudoers install --user 'ana' && "))
         // Never replaces a real file at the link's path.
         #expect(script.contains("if [ ! -e '/usr/local/bin/vigilia' ] || [ -L '/usr/local/bin/vigilia' ]; then"))
     }

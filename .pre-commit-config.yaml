@@ -30,3 +30,21 @@ repos:
         files: (\.rs|^Cargo\.(toml|lock)|/Cargo\.toml|^clippy\.toml)$
         pass_filenames: false
         require_serial: true
+
+      # The menu bar app. `swift format` ships with the Swift toolchain (Xcode or the Command
+      # Line Tools) and reads apps/macos/.swift-format. Formats in place, like cargo-fmt.
+      - id: swift-format
+        name: swift format
+        entry: swift format --in-place --parallel
+        language: unsupported
+        types: [swift]
+        files: ^apps/macos/
+
+      # swift-format's lint rules and a build that fails on compiler warnings.
+      - id: swift-lint
+        name: swift lint
+        entry: apps/macos/scripts/lint.sh
+        language: unsupported
+        files: ^apps/macos/(.*\.swift|\.swift-format)$
+        pass_filenames: false
+        require_serial: true

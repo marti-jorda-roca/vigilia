@@ -58,7 +58,7 @@ struct DaemonIntegrationTests {
         #expect(seen.session?.endsAt == extended.endsAt)
 
         _ = try await client.stop()
-        guard case let .sessionChanged(ended?) = await events.next() else {
+        guard case .sessionChanged(let ended?) = await events.next() else {
             Issue.record("expected the session to end")
             return
         }

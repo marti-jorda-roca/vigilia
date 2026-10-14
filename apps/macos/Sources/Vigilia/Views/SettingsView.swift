@@ -26,12 +26,16 @@ struct SettingsView: View {
                             Stepper(value: rules.batteryFloorPercent) { store.setBatteryFloor($0) }
                         }
                         Text("On battery, the session ends below this charge.").foregroundColor(Pixel.dim)
-                        Toggle(isOn: Binding(get: { rules.endAtCriticalHeat }, set: { store.setEndAtCriticalHeat($0) })) {
+                        Toggle(
+                            isOn: Binding(get: { rules.endAtCriticalHeat }, set: { store.setEndAtCriticalHeat($0) })
+                        ) {
                             PixelText("END AT CRITICAL HEAT")
                         }
                     } else if store.settingsUnsupported {
-                        Text("The running service (\(store.serverVersion ?? "older")) has no settings yet. Update the CLI with `cargo install --path crates/cli --locked` from the repo; the service picks it up the next time it starts.")
-                            .foregroundColor(Pixel.dim)
+                        Text(
+                            "The running service (\(store.serverVersion ?? "older")) has no settings yet. Update the CLI with `cargo install --path crates/cli --locked` from the repo; the service picks it up the next time it starts."
+                        )
+                        .foregroundColor(Pixel.dim)
                     } else {
                         Text(store.connection == .connecting ? "Connecting…" : "Not connected to the service.")
                             .foregroundColor(Pixel.dim)
@@ -53,7 +57,10 @@ struct SettingsView: View {
             Section(title: "GENERAL") {
                 Toggle(isOn: $launchAtLogin) { PixelText("LAUNCH AT LOGIN") }
                     .disabled(!LoginItem.available)
-                    .help(LoginItem.available ? "Start Vigilia when you log in." : "Needs Vigilia to run as an app from Applications.")
+                    .help(
+                        LoginItem.available
+                            ? "Start Vigilia when you log in." : "Needs Vigilia to run as an app from Applications."
+                    )
                     .onChange(of: launchAtLogin) { on in
                         guard on != LoginItem.enabled else { return }
                         do {
@@ -88,7 +95,12 @@ struct SettingsView: View {
         .padding(.top, 36)  // under the window's close button
         .padding(.bottom, Pixel.unit * 12)
         .frame(width: 440)
-        .background(ZStack(alignment: .top) { Pixel.background; PixelStars().frame(height: 60) })
+        .background(
+            ZStack(alignment: .top) {
+                Pixel.background
+                PixelStars().frame(height: 60)
+            }
+        )
         .pixelSurface()
     }
 
@@ -131,7 +143,9 @@ private struct SetupSection: View {
         Row(label: "SERVICE", value: serviceState)
         Text(serviceExplanation).foregroundColor(Pixel.dim)
         HStack {
-            Button { setup.installService() } label: {
+            Button {
+                setup.installService()
+            } label: {
                 PixelText(!status.agentInstalled ? "INSTALL" : status.needsRepair ? "REPAIR" : "REINSTALL")
             }
             Spacer()
@@ -142,25 +156,39 @@ private struct SetupSection: View {
             Text("Sessions can keep the Mac awake with the lid closed. Removing asks for your password.")
                 .foregroundColor(Pixel.dim)
         } else {
-            Text("To keep the Mac awake with the lid closed, Vigilia needs this rule in /etc/sudoers.d/vigilia. It asks for your password once, and also puts `vigilia` in /usr/local/bin for Terminal.")
-                .foregroundColor(Pixel.dim)
+            Text(
+                "To keep the Mac awake with the lid closed, Vigilia needs this rule in /etc/sudoers.d/vigilia. It asks for your password once, and also puts `vigilia` in /usr/local/bin for Terminal."
+            )
+            .foregroundColor(Pixel.dim)
             Text(SudoersRule.text(user: NSUserName()))
                 .font(.system(size: 10, design: .monospaced))
                 .textSelection(.enabled)
         }
         HStack {
             if status.sudoersInstalled {
-                Button { setup.removeLidSetup() } label: { PixelText("REMOVE…") }
+                Button {
+                    setup.removeLidSetup()
+                } label: {
+                    PixelText("REMOVE…")
+                }
             } else {
-                Button { setup.installLidSetup() } label: { PixelText("SET UP…") }
+                Button {
+                    setup.installLidSetup()
+                } label: {
+                    PixelText("SET UP…")
+                }
             }
             Spacer()
         }
 
         PixelRule(color: Pixel.faint)
         HStack {
-            Button { setup.uninstall() } label: { PixelText("UNINSTALL") }
-                .disabled(sessionLive || !somethingInstalled)
+            Button {
+                setup.uninstall()
+            } label: {
+                PixelText("UNINSTALL")
+            }
+            .disabled(sessionLive || !somethingInstalled)
             Spacer()
         }
         Text(uninstallExplanation).foregroundColor(Pixel.dim)
@@ -181,7 +209,8 @@ private struct SetupSection: View {
     private var serviceExplanation: String {
         let status = setup.status
         guard let program = status.agentProgram else {
-            return "Lets Vigilia start the service when it's needed and undo a session's changes after a restart. No password needed."
+            return
+                "Lets Vigilia start the service when it's needed and undo a session's changes after a restart. No password needed."
         }
         if !status.agentProgramExists {
             return "The service points at a program that is gone (\(program)). Repair points it at this app."
@@ -205,10 +234,12 @@ private struct SetupSection: View {
     // MARK: Not in Applications
 
     @ViewBuilder private var moveToApplications: some View {
-        Text(setup.location == .translocated
-            ? "Vigilia is running straight from the download. Drag it into Applications and open it from there: the service remembers where its program is."
-            : "Move Vigilia to Applications first, and open it from there: the service remembers where its program is.")
-            .foregroundColor(Pixel.dim)
+        Text(
+            setup.location == .translocated
+                ? "Vigilia is running straight from the download. Drag it into Applications and open it from there: the service remembers where its program is."
+                : "Move Vigilia to Applications first, and open it from there: the service remembers where its program is."
+        )
+        .foregroundColor(Pixel.dim)
         HStack {
             Button {
                 NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
@@ -225,15 +256,20 @@ private struct SetupSection: View {
     /// A binary that isn't an app bundle has no helper to install, so the button hands over the
     /// command to run in Terminal.
     @ViewBuilder private var terminalFallback: some View {
-        Row(label: "SERVICE", value: setup.status.agentInstalled ? (setup.status.needsRepair ? "needs repair" : "installed") : "started on demand")
+        Row(
+            label: "SERVICE",
+            value: setup.status.agentInstalled
+                ? (setup.status.needsRepair ? "needs repair" : "installed") : "started on demand")
         Row(label: "LID SETUP", value: setup.status.sudoersInstalled ? "set up" : "not set up")
         HStack {
             Button(action: copySetupCommand) { PixelText(copied ? "COPIED" : "COPY COMMAND") }
                 .help("Copy `\(Self.setupCommand)` to run in Terminal.")
             Spacer()
         }
-        Text("This build isn't the packaged app, so it can't set anything up. Run `\(Self.setupCommand)` in Terminal; the button copies the command.")
-            .foregroundColor(Pixel.dim)
+        Text(
+            "This build isn't the packaged app, so it can't set anything up. Run `\(Self.setupCommand)` in Terminal; the button copies the command."
+        )
+        .foregroundColor(Pixel.dim)
     }
 
     private func copySetupCommand() {
@@ -280,14 +316,22 @@ private struct Stepper: View {
 
     var body: some View {
         HStack(spacing: Pixel.unit * 4) {
-            Button { onChange(step(-1)) } label: { PixelText("-") }
-                .disabled(value <= 0)
-                .accessibilityLabel("Lower the battery floor")
+            Button {
+                onChange(step(-1))
+            } label: {
+                PixelText("-")
+            }
+            .disabled(value <= 0)
+            .accessibilityLabel("Lower the battery floor")
             PixelText("\(value)%", color: Pixel.yellow)
                 .frame(minWidth: 40)
-            Button { onChange(step(1)) } label: { PixelText("+") }
-                .disabled(value >= 100)
-                .accessibilityLabel("Raise the battery floor")
+            Button {
+                onChange(step(1))
+            } label: {
+                PixelText("+")
+            }
+            .disabled(value >= 100)
+            .accessibilityLabel("Raise the battery floor")
         }
         .buttonStyle(PixelButtonStyle())
     }
@@ -345,7 +389,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     private func makeWindow() -> NSWindow {
-        let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(store: store, setup: setup)))
+        let window = NSWindow(
+            contentViewController: NSHostingController(rootView: SettingsView(store: store, setup: setup)))
         window.title = "Vigilia Settings"
         window.styleMask = [.titled, .closable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true

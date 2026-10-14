@@ -44,13 +44,13 @@ public enum Countdown {
         guard session.state == .active else { return nil }
         let next: Date
         switch value(for: session, at: now) {
-        case let .remaining(left):
+        case .remaining(let left):
             guard left > 0, let endsAt = session.endsAt else { return nil }
             // The label shows ceil(left / 60) minutes; it drops when `left` reaches the next
             // lower multiple of a minute.
             let shown = (left / 60).rounded(.up)
             next = endsAt.addingTimeInterval(-(shown - 1) * 60)
-        case let .elapsed(since):
+        case .elapsed(let since):
             let shown = (since / 60).rounded(.down)
             next = session.startedAt.addingTimeInterval((shown + 1) * 60)
         }
@@ -60,15 +60,15 @@ public enum Countdown {
 
     private static func wholeMinutes(_ value: Value) -> Int {
         switch value {
-        case let .remaining(t): Int((t / 60).rounded(.up))
-        case let .elapsed(t): Int((t / 60).rounded(.down))
+        case .remaining(let t): Int((t / 60).rounded(.up))
+        case .elapsed(let t): Int((t / 60).rounded(.down))
         }
     }
 
     private static func wholeSeconds(_ value: Value) -> Int {
         switch value {
-        case let .remaining(t): Int(t.rounded(.up))
-        case let .elapsed(t): Int(t.rounded(.down))
+        case .remaining(let t): Int(t.rounded(.up))
+        case .elapsed(let t): Int(t.rounded(.down))
         }
     }
 }

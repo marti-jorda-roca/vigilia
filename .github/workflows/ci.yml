@@ -38,6 +38,18 @@ jobs:
       - name: test
         run: cargo test --workspace
 
+  swift-lint:
+    name: Swift lint
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: swift format --version
+      # swift-format (rules in apps/macos/.swift-format) and a build with warnings as errors.
+      - name: lint
+        run: apps/macos/scripts/lint.sh
+
   macos-app:
     name: macOS app
     runs-on: macos-latest

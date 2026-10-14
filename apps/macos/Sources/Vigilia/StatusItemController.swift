@@ -15,7 +15,7 @@ final class StatusItemController: NSObject {
     private let setup: SetupModel
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let panel = MenuPanel()
-    private var hosting: NSHostingController<AnyView>!
+    private let hosting = NSHostingController(rootView: AnyView(EmptyView()))
     private var contentSize: CGSize = .zero
     private var timer: Timer?
     private var observers: Set<AnyCancellable> = []
@@ -36,7 +36,7 @@ final class StatusItemController: NSObject {
             self?.closeMenu()
             openSettings()
         }
-        hosting = NSHostingController(rootView: AnyView(menu))
+        hosting.rootView = AnyView(menu)
         // The panel's frame is set only by `place()`, from the content's preferred size. Left
         // to itself, the hosting view resizes its window to fit the content while keeping the
         // bottom-left corner fixed, so the menu drifts away from the menu bar whenever its

@@ -131,7 +131,9 @@ struct PixelStars: View {
     var body: some View {
         Canvas { context, size in
             for (x, y) in Self.stars {
-                let rect = CGRect(x: (x * size.width).rounded(), y: (y * size.height).rounded(), width: Pixel.unit, height: Pixel.unit)
+                let rect = CGRect(
+                    x: (x * size.width).rounded(), y: (y * size.height).rounded(), width: Pixel.unit, height: Pixel.unit
+                )
                 context.fill(Path(rect), with: .color(Pixel.faint))
             }
         }

@@ -129,7 +129,9 @@ public struct Request: Encodable, Sendable {
 
     private enum Keys: String, CodingKey {
         case id, v, method, params
-        case duration, lidClosedAwake = "lid_closed_awake", filter, rules
+        case duration
+        case lidClosedAwake = "lid_closed_awake"
+        case filter, rules
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -141,16 +143,16 @@ public struct Request: Encodable, Sendable {
         switch call {
         case .hello, .sessionStop, .sessionStatus, .configGet:
             break
-        case let .sessionStart(duration, lidClosedAwake):
+        case .sessionStart(let duration, let lidClosedAwake):
             if let duration {
                 try params.encode(HumanDuration.format(seconds: duration), forKey: .duration)
             }
             try params.encode(lidClosedAwake, forKey: .lidClosedAwake)
-        case let .sessionExtend(seconds):
+        case .sessionExtend(let seconds):
             try params.encode(HumanDuration.format(seconds: seconds), forKey: .duration)
-        case let .subscribe(filter):
+        case .subscribe(let filter):
             try params.encode(filter, forKey: .filter)
-        case let .configSet(patch):
+        case .configSet(let patch):
             try params.encode(patch, forKey: .rules)
         }
     }
