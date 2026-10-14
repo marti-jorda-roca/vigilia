@@ -10,6 +10,9 @@
         },
         {
           "$ref": "#/$defs/Empty"
+        },
+        {
+          "$ref": "#/$defs/ConfigResult"
         }
       ],
       "description": "The possible `result` shapes. Clients know which one to expect from the method they called;\nthis type exists for the JSON Schema."
@@ -46,6 +49,33 @@
           "default": false,
           "description": "The service was started by the OS on the first connection (launchd / systemd).",
           "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "ConfigResult": {
+      "description": "Result of `config.get` and `config.set`.",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/Settings"
+        }
+      },
+      "required": [
+        "config"
+      ],
+      "type": "object"
+    },
+    "ConfigSetParams": {
+      "properties": {
+        "rules": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RulesPatch"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "type": "object"
@@ -185,6 +215,23 @@
             "detail"
           ],
           "type": "object"
+        },
+        {
+          "description": "The settings changed (`config.set`).",
+          "properties": {
+            "config": {
+              "$ref": "#/$defs/Settings"
+            },
+            "event": {
+              "const": "config_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "config"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -194,7 +241,8 @@
         "lid_changed",
         "power_changed",
         "warning",
-        "needs_attention"
+        "needs_attention",
+        "config_changed"
       ],
       "type": "string"
     },
@@ -385,6 +433,38 @@
             "params"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "config.get",
+              "type": "string"
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "config.set",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/ConfigSetParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -442,6 +522,46 @@
         "id",
         "ok"
       ],
+      "type": "object"
+    },
+    "RuleSettings": {
+      "description": "The rule settings a client can read and change.",
+      "properties": {
+        "battery_floor_percent": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "end_at_critical_heat": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "battery_floor_percent",
+        "end_at_critical_heat"
+      ],
+      "type": "object"
+    },
+    "RulesPatch": {
+      "description": "A patch to the `[rules]` settings: only the fields sent change.",
+      "properties": {
+        "battery_floor_percent": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "end_at_critical_heat": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "Scope": {
@@ -561,6 +681,18 @@
           "type": "string"
         }
       ]
+    },
+    "Settings": {
+      "description": "The settings returned by `config.get` and `config.set`.",
+      "properties": {
+        "rules": {
+          "$ref": "#/$defs/RuleSettings"
+        }
+      },
+      "required": [
+        "rules"
+      ],
+      "type": "object"
     },
     "SimulateLidParams": {
       "properties": {

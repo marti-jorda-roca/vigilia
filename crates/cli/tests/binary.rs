@@ -1,5 +1,5 @@
-//! The installed binary end to end: it spawns a real service that takes a real power assertion,
-//! so it only runs on demand, on macOS:
+//! The installed binary end to end, on macOS. Tests that take a real power assertion only run
+//! on demand:
 //!
 //! ```sh
 //! cargo test -p vigilia --test binary -- --ignored
@@ -9,7 +9,7 @@
 use std::path::Path;
 use std::process::{Command, Output};
 
-use vigilia_protocol::{SessionResult, SessionState};
+use vigilia_protocol::{ConfigResult, SessionResult, SessionState};
 
 fn vigilia(home: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_vigilia"))
@@ -33,6 +33,52 @@ impl Drop for KillService<'_> {
             let _ = Command::new("kill").arg(pid.trim()).status();
         }
     }
+}
+
+#[test]
+fn config_get_and_set() {
+    // No session, so no power assertion: this one runs with the rest of the suite.
+    let home = tempfile::tempdir().unwrap();
+    let _kill = KillService(home.path());
+
+    let got_out = vigilia(home.path(), &["config", "get", "--json"]);
+    assert!(got_out.status.success(), "{got_out:?}");
+    let got: ConfigResult = serde_json::from_slice(&got_out.stdout).unwrap();
+    assert_eq!(got.config.rules.battery_floor_percent, 10);
+    assert!(got.config.rules.end_at_critical_heat);
+
+    let set_out = vigilia(
+        home.path(),
+        &[
+            "config",
+            "set",
+            "rules.battery_floor_percent",
+            "20",
+            "--json",
+        ],
+    );
+    assert!(set_out.status.success(), "{set_out:?}");
+    let set: ConfigResult = serde_json::from_slice(&set_out.stdout).unwrap();
+    assert_eq!(set.config.rules.battery_floor_percent, 20);
+
+    let got_out = vigilia(home.path(), &["config", "get", "--json"]);
+    let got: ConfigResult = serde_json::from_slice(&got_out.stdout).unwrap();
+    assert_eq!(got.config.rules.battery_floor_percent, 20);
+
+    let bad = vigilia(
+        home.path(),
+        &["config", "set", "rules.battery_floor_percent", "101"],
+    );
+    assert_eq!(bad.status.code(), Some(1));
+}
+
+#[test]
+fn sudoers_refuses_without_root() {
+    let home = tempfile::tempdir().unwrap();
+    let out = vigilia(home.path(), &["sudoers", "install", "--user", "nobody"]);
+    assert_eq!(out.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("must be run as root"), "{stderr}");
 }
 
 #[test]

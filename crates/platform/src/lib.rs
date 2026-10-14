@@ -81,6 +81,10 @@ pub trait Platform: Send + Sync {
     fn remove_backstop(&self) -> Result<()> {
         Ok(())
     }
+
+    /// Posts the session-change doorbell, so a GUI app that is not connected can wake and
+    /// reconnect. Default: no-op.
+    fn announce_session_change(&self) {}
 }
 
 /// How often the backstop runs during a session.

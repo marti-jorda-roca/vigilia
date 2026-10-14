@@ -10,8 +10,8 @@ use vigilia_core::{ActionKind, Config, Journal, UndoRecord};
 use vigilia_daemon::Exit;
 use vigilia_platform::FakePlatform;
 use vigilia_protocol::{
-    Call, ErrorCode, Event, LidState, PowerSnapshot, SessionResult, SessionState, SubscribeParams,
-    ThermalLevel,
+    Call, ConfigResult, ConfigSetParams, ErrorCode, Event, LidState, PowerSnapshot, RulesPatch,
+    SessionResult, SessionState, SubscribeParams, ThermalLevel,
 };
 
 const MIN: Duration = Duration::from_secs(60);
@@ -491,6 +491,156 @@ async fn simulate_lid_publishes_a_lid_event() {
         )),
         "{events:?}"
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn config_set_persists_emits_config_changed_and_keeps_comments() {
+    let dir = tempfile::tempdir().unwrap();
+    let config_path = dir.path().join("config.toml");
+    std::fs::write(
+        &config_path,
+        "# keep me\n[energy]\nidle_exit_minutes = 7\n\n[unknown]\nx = 1\n\n[rules]\nbattery_floor_percent = 10\n",
+    )
+    .unwrap();
+    let mut h = Harness::spawn_with(dir, FakePlatform::new(), Config::default());
+    let mut sub = h
+        .call(Call::Subscribe(SubscribeParams::default()))
+        .await
+        .subscription
+        .unwrap();
+    let got: ConfigResult = h
+        .call(Call::ConfigGet {})
+        .await
+        .response
+        .into_result()
+        .unwrap();
+    assert_eq!(got.config.rules.battery_floor_percent, 10);
+    assert!(got.config.rules.end_at_critical_heat);
+
+    let set: ConfigResult = h
+        .call(Call::ConfigSet(ConfigSetParams {
+            rules: Some(RulesPatch {
+                battery_floor_percent: Some(20),
+                end_at_critical_heat: Some(false),
+            }),
+        }))
+        .await
+        .response
+        .into_result()
+        .unwrap();
+    assert_eq!(set.config.rules.battery_floor_percent, 20);
+    assert!(!set.config.rules.end_at_critical_heat);
+
+    let events = ready_events(&mut sub).await;
+    assert!(
+        events.iter().any(|e| matches!(
+            e,
+            Event::ConfigChanged { config }
+            if config.rules.battery_floor_percent == 20
+                && !config.rules.end_at_critical_heat
+        )),
+        "{events:?}"
+    );
+    let text = std::fs::read_to_string(&config_path).unwrap();
+    assert!(text.contains("# keep me"), "{text}");
+    assert!(text.contains("[unknown]"), "{text}");
+    assert!(text.contains("idle_exit_minutes = 7"), "{text}");
+    let loaded = Config::load(&config_path).unwrap();
+    assert_eq!(loaded.rules.battery_floor_percent, 20);
+    assert!(!loaded.rules.end_at_critical_heat);
+    assert_eq!(loaded.energy.idle_exit_minutes, 7);
+}
+
+#[tokio::test(start_paused = true)]
+async fn config_set_rejects_an_out_of_range_floor() {
+    let mut h = Harness::spawn();
+    let err = h
+        .call(Call::ConfigSet(ConfigSetParams {
+            rules: Some(RulesPatch {
+                battery_floor_percent: Some(101),
+                end_at_critical_heat: None,
+            }),
+        }))
+        .await
+        .response
+        .into_result::<ConfigResult>()
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode::BadRequest);
+    let got: ConfigResult = h
+        .call(Call::ConfigGet {})
+        .await
+        .response
+        .into_result()
+        .unwrap();
+    assert_eq!(got.config.rules.battery_floor_percent, 10);
+}
+
+#[tokio::test(start_paused = true)]
+async fn raising_the_floor_mid_session_ends_the_session() {
+    let platform = FakePlatform::new();
+    platform.set_power(PowerSnapshot {
+        battery_percent: Some(42),
+        on_ac: false,
+        thermal: ThermalLevel::Nominal,
+    });
+    let mut h = Harness::spawn_with(tempfile::tempdir().unwrap(), platform, Config::default());
+    h.start("1h").await;
+    assert!(h.platform.awake());
+    let set: ConfigResult = h
+        .call(Call::ConfigSet(ConfigSetParams {
+            rules: Some(RulesPatch {
+                battery_floor_percent: Some(50),
+                end_at_critical_heat: None,
+            }),
+        }))
+        .await
+        .response
+        .into_result()
+        .unwrap();
+    assert_eq!(set.config.rules.battery_floor_percent, 50);
+    assert!(!h.platform.awake());
+    let status: SessionResult = h
+        .call(Call::SessionStatus {})
+        .await
+        .response
+        .into_result()
+        .unwrap();
+    assert_eq!(status.session, None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn announce_session_change_counts_start_extend_and_end() {
+    let mut h = Harness::spawn();
+    assert_eq!(h.platform.announce_count(), 0);
+    h.start("1h").await;
+    assert_eq!(h.platform.announce_count(), 1);
+    h.call(Call::SessionExtend(vigilia_protocol::SessionExtendParams {
+        duration: "5m".parse().unwrap(),
+    }))
+    .await;
+    assert_eq!(h.platform.announce_count(), 2);
+    h.call(Call::SessionStop {}).await;
+    assert_eq!(h.platform.announce_count(), 3);
+}
+
+#[tokio::test(start_paused = true)]
+async fn heat_flag_off_does_not_end_the_session_at_critical_heat() {
+    let mut h = Harness::spawn();
+    h.start("1h").await;
+    h.call(Call::ConfigSet(ConfigSetParams {
+        rules: Some(RulesPatch {
+            battery_floor_percent: None,
+            end_at_critical_heat: Some(false),
+        }),
+    }))
+    .await;
+    h.platform.emit_power(PowerSnapshot {
+        battery_percent: Some(90),
+        on_ac: false,
+        thermal: ThermalLevel::Critical,
+    });
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert!(h.platform.awake());
 }
 
 #[tokio::test(start_paused = true)]

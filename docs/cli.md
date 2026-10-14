@@ -83,6 +83,25 @@ Undoes anything a crashed session left behind and restores normal sleep. It take
 
 `uninstall` removes all of it, including any backstop job.
 
+With `--skip-sudoers`, both commands leave the sudoers rule alone and only install or remove the LaunchAgents, so they need no admin rights.
+
+### `vigilia config get` / `vigilia config set <key> <value>`
+
+`get` prints the settings the service is using. `set` changes one of them, applies it straight away and saves it to `config.toml`, keeping the file's comments and other keys:
+
+```sh
+vigilia config get
+vigilia config set rules.battery_floor_percent 20
+vigilia config set rules.end_at_critical_heat false
+```
+
+| Key | Values |
+|---|---|
+| `rules.battery_floor_percent` | `0` to `100` |
+| `rules.end_at_critical_heat` | `true` or `false` |
+
+Raising the floor above the current charge during a session ends that session, as starting a session below the floor would. `status --watch` prints `config changed` when a setting changes.
+
 ### `vigilia debug simulate-lid close|open`
 
 Pretends the lid closed or opened: the service publishes the same `lid_changed` event a real lid movement produces. Useful for testing lid behaviour without shutting the laptop.
@@ -110,6 +129,8 @@ A session in `--json` output looks like this (`session` is `null` when nothing i
 ```
 
 `ends_at` is `null` for a session without an end. `state` is one of `Active`, `Ending`, `Ended` or `NeedsAttention`. `stop` returns the session it ended, in state `Ended`. Times are UTC, in RFC 3339 format.
+
+`config get` and `config set` print `{"config":{"rules":{"battery_floor_percent":10,"end_at_critical_heat":true}}}`.
 
 With `--json`, errors go to stderr as `{"error":{"code":"no_session","message":"no session is running"}}`. The codes are listed under [Errors](#errors).
 
@@ -141,7 +162,7 @@ Prefer a duration over a plain `vigilia start` here. A session without an end la
 
 The CLI is a client. The real work happens in the service, which is the same `vigilia` binary running as `vigilia daemon`.
 
-- **It starts on demand.** Any command starts the service if it isn't running. In v0.2, `vigilia install` will add a LaunchAgent so launchd starts it instead (socket activation).
+- **It starts on demand.** Any command starts the service if it isn't running. After `vigilia install`, launchd starts it instead, on the first connection to its socket (socket activation).
 - **It exits when idle.** With no session and no `status --watch` running, the service exits after 5 minutes. When no session runs, no Vigilia process runs.
 - **It runs as your user**, not as root, and only your user can connect to its socket.
 - **A crash doesn't leave the Mac awake.** If the service is killed, macOS drops its power assertion. On the next start the service reads its journal and finishes any undo steps.
@@ -181,7 +202,7 @@ When the service refuses a command, it returns an error code. The CLI prints the
 |---|---|
 | `session_active` | `start` while a session is already running (or ending, or needs attention) |
 | `no_session` | `extend` with no session running |
-| `bad_request` | Invalid input, such as a zero duration or one over 30 days |
+| `bad_request` | Invalid input, such as a zero duration, one over 30 days, or an unknown `config set` key or value |
 | `unsupported` | The feature isn't available on this OS or machine |
 | `forbidden` | The client lacks permission. Local commands have every permission, so you only see this from remote clients (later) |
 | `unsupported_version` | The CLI and the service speak different protocol versions; reinstall so both match |
@@ -197,7 +218,7 @@ These are designed in the [architecture plan](architecture-plan.md#cli) but not 
 | `vigilia start <duration> --lid`, `--no-lid-actions` | v0.2 (lid closed), v0.6 (lid actions) |
 | `vigilia install` / `uninstall` | v0.2 |
 | `vigilia recover` | v0.2 |
-| `vigilia config get\|set\|edit` | Later |
+| `vigilia config edit` | Later |
 | `vigilia debug simulate-lid close\|open` | v0.2 |
 | `vigilia agent list\|tail\|send\|notify` | v0.4 |
 | `vigilia remote enable\|disable\|pair\|devices\|revoke` | v0.5 |
@@ -209,6 +230,7 @@ These are designed in the [architecture plan](architecture-plan.md#cli) but not 
 ```toml
 [rules]
 battery_floor_percent = 10   # end the session below this charge
+end_at_critical_heat = true  # end the session when the Mac reports critical heat
 ```
 
-Critical heat always ends the session. Rules are checked only when the OS reports a battery or heat change (and once when a session starts), never on a timer.
+`vigilia config set` changes these while the service runs (see above); edits to the file itself take effect the next time the service starts. Rules are checked only when the OS reports a battery or heat change (and once when a session starts), never on a timer.

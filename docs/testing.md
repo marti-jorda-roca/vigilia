@@ -24,13 +24,13 @@ Then:
    (5 minutes) past the point where it fires. `pmset -g | grep SleepDisabled` must show
    `0` (or no line), and the daemon log must show the recovery. Close and open the lid:
    the Mac must sleep normally again.
-3. **Battery floor.** Edit `config.toml` (`~/Library/Application Support/vigilia/config.toml`):
-   ```toml
-   [rules]
-   battery_floor_percent = 99
+3. **Battery floor.** Start a session on battery, then raise the floor above the charge:
+   ```sh
+   vigilia config set rules.battery_floor_percent 99
    ```
-   Start a session on battery: it must end straight away and sleep must be restored.
-   Put the floor back to `10` afterwards.
+   The session must end straight away and sleep must be restored. Starting a new session
+   on battery must also end straight away. Put the floor back with
+   `vigilia config set rules.battery_floor_percent 10`.
 4. **No backstop outside a session.** `launchctl list | grep vigilia` shows no
    `com.vigilia.backstop` job before a session, during step 1 above it does, and after
    `vigilia stop` it is gone again.

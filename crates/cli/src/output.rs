@@ -7,7 +7,7 @@ use std::io::Write;
 use std::time::Duration;
 
 use chrono::{DateTime, Local, Utc};
-use vigilia_protocol::{Session, SessionResult, SessionState};
+use vigilia_protocol::{ConfigResult, Session, SessionResult, SessionState, Settings};
 
 use crate::error::{CliError, exit};
 
@@ -23,6 +23,21 @@ pub fn print_session(session: Option<&Session>, json: bool) -> u8 {
     };
     let _ = writeln!(std::io::stdout().lock(), "{line}");
     exit_code(session)
+}
+
+/// Prints the settings from `config get`/`set` and returns the exit code (always 0).
+pub fn print_config(config: Settings, json: bool) -> u8 {
+    let line = if json {
+        // Plain numbers and booleans: serializing cannot fail.
+        serde_json::to_string(&ConfigResult { config }).unwrap_or_default()
+    } else {
+        format!(
+            "rules.battery_floor_percent = {}\nrules.end_at_critical_heat = {}",
+            config.rules.battery_floor_percent, config.rules.end_at_critical_heat
+        )
+    };
+    let _ = writeln!(std::io::stdout().lock(), "{line}");
+    0
 }
 
 pub fn print_error(err: &CliError, json: bool, hint: Option<&str>) -> u8 {

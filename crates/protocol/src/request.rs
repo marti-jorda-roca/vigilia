@@ -39,6 +39,25 @@ pub enum Call {
     /// Pretends the lid opened or closed (`vigilia debug simulate-lid`). Admin only.
     #[serde(rename = "debug.simulate_lid")]
     DebugSimulateLid(SimulateLidParams),
+    #[serde(rename = "config.get")]
+    ConfigGet {},
+    #[serde(rename = "config.set")]
+    ConfigSet(ConfigSetParams),
+}
+
+/// A patch to the `[rules]` settings: only the fields sent change.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RulesPatch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub battery_floor_percent: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_at_critical_heat: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ConfigSetParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rules: Option<RulesPatch>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -79,6 +98,8 @@ impl Call {
             Call::SessionStatus {} => "session.status",
             Call::Subscribe(_) => "subscribe",
             Call::DebugSimulateLid(_) => "debug.simulate_lid",
+            Call::ConfigGet {} => "config.get",
+            Call::ConfigSet(_) => "config.set",
         }
     }
 
@@ -86,10 +107,13 @@ impl Call {
     pub fn required_scope(&self) -> Option<Scope> {
         match self {
             Call::Hello {} => None,
-            Call::SessionStatus {} | Call::Subscribe(_) => Some(Scope::SessionRead),
+            Call::SessionStatus {} | Call::Subscribe(_) | Call::ConfigGet {} => {
+                Some(Scope::SessionRead)
+            }
             Call::SessionStart(_) | Call::SessionExtend(_) | Call::SessionStop {} => {
                 Some(Scope::SessionControl)
             }
+            Call::ConfigSet(_) => Some(Scope::ConfigWrite),
             Call::DebugSimulateLid(_) => Some(Scope::Admin),
         }
     }
@@ -256,6 +280,14 @@ mod tests {
             Call::DebugSimulateLid(SimulateLidParams {
                 state: crate::LidState::Closed,
             }),
+            Call::ConfigGet {},
+            Call::ConfigSet(ConfigSetParams {
+                rules: Some(RulesPatch {
+                    battery_floor_percent: Some(20),
+                    end_at_critical_heat: Some(false),
+                }),
+            }),
+            Call::ConfigSet(ConfigSetParams { rules: None }),
         ];
         for (i, call) in calls.into_iter().enumerate() {
             let req = Request::new(i as u64, call);

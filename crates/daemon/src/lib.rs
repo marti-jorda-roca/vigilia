@@ -84,6 +84,7 @@ fn run(paths: Paths, config: Config) -> Result<(), DaemonError> {
             timer,
             config,
             journal: Journal::open(&paths.journal)?,
+            config_path: Some(paths.config.clone()),
             socket_activated,
         });
         let (handle, rx) = ServiceHandle::channel();

@@ -25,15 +25,16 @@ pub mod watch;
 
 use std::process::ExitCode;
 
-pub use args::{Cli, Command, DebugCommand, LidArg};
+pub use args::{Cli, Command, ConfigCommand, DebugCommand, LidArg, SudoersCommand};
 pub use error::{CliError, exit};
 
 pub fn run(cli: Cli) -> ExitCode {
     let code = match cli.command {
         Command::Daemon => daemon(),
         Command::Recover => recover(),
-        Command::Install { yes } => install(yes, false),
-        Command::Uninstall { yes } => install(yes, true),
+        Command::Install { yes, skip_sudoers } => install(yes, skip_sudoers, false),
+        Command::Uninstall { yes, skip_sudoers } => install(yes, skip_sudoers, true),
+        Command::Sudoers { command } => sudoers(command),
         command => {
             let plain_start = matches!(command, Command::Start { extend: false, .. });
             client_command(command, cli.json).unwrap_or_else(|e| {
@@ -76,12 +77,35 @@ fn recover() -> u8 {
     }
 }
 
+/// `vigilia sudoers install|remove`, run as root by the app through the admin password dialog.
+fn sudoers(command: SudoersCommand) -> u8 {
+    use std::io::Write;
+    use vigilia_daemon::install::{SUDOERS_PATH, remove_sudoers, write_sudoers};
+    let (result, done) = match command {
+        SudoersCommand::Install { user } => (write_sudoers(&user), "installed"),
+        SudoersCommand::Remove => (remove_sudoers(), "removed"),
+    };
+    match result {
+        Ok(()) => {
+            let _ = writeln!(
+                std::io::stdout().lock(),
+                "{done} sudoers rule {SUDOERS_PATH}"
+            );
+            0
+        }
+        Err(e) => {
+            let _ = writeln!(std::io::stderr().lock(), "vigilia sudoers: {e}");
+            exit::REFUSED
+        }
+    }
+}
+
 /// Shows what would be installed and asks, unless `--yes`; then installs or uninstalls.
-fn install(yes: bool, uninstall: bool) -> u8 {
+fn install(yes: bool, skip_sudoers: bool, uninstall: bool) -> u8 {
     use std::io::Write;
     let mut stdout = std::io::stdout().lock();
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
-    if !uninstall {
+    if !uninstall && !skip_sudoers {
         let _ = writeln!(
             stdout,
             "This installs the LaunchAgents and this sudoers rule ({}):\n{}",
@@ -104,23 +128,7 @@ fn install(yes: bool, uninstall: bool) -> u8 {
             return 0;
         }
     }
-    let result = if uninstall {
-        vigilia_daemon::install::uninstall()
-    } else {
-        let paths = match vigilia_core::Paths::for_user() {
-            Ok(paths) => paths,
-            Err(e) => {
-                let _ = writeln!(std::io::stderr().lock(), "vigilia install: {e}");
-                return exit::UNREACHABLE;
-            }
-        };
-        if let Err(e) = paths.create_dirs() {
-            let _ = writeln!(std::io::stderr().lock(), "vigilia install: {e}");
-            return exit::UNREACHABLE;
-        }
-        let program = std::env::current_exe().unwrap_or_else(|_| "vigilia".into());
-        vigilia_daemon::install::install(&program, &user, &paths)
-    };
+    let result = run_install(skip_sudoers, uninstall, &user);
     match result {
         Ok(done) => {
             for line in done {
@@ -132,6 +140,24 @@ fn install(yes: bool, uninstall: bool) -> u8 {
             let _ = writeln!(std::io::stderr().lock(), "vigilia: {e}");
             exit::REFUSED
         }
+    }
+}
+
+fn run_install(skip_sudoers: bool, uninstall: bool, user: &str) -> Result<Vec<String>, String> {
+    if uninstall {
+        return if skip_sudoers {
+            vigilia_daemon::install::uninstall_agents()
+        } else {
+            vigilia_daemon::install::uninstall()
+        };
+    }
+    let paths = vigilia_core::Paths::for_user().map_err(|e| e.to_string())?;
+    paths.create_dirs().map_err(|e| e.to_string())?;
+    let program = std::env::current_exe().unwrap_or_else(|_| "vigilia".into());
+    if skip_sudoers {
+        vigilia_daemon::install::install_agents(&program, &paths)
+    } else {
+        vigilia_daemon::install::install(&program, user, &paths)
     }
 }
 
@@ -152,6 +178,13 @@ fn client_command(command: Command, json: bool) -> Result<u8, CliError> {
 
     let paths = vigilia_core::Paths::for_user().map_err(CliError::Unreachable)?;
     let mut client = client::Client::connect_or_spawn(&paths)?;
+    if let Command::Config { command } = command {
+        let config = match command {
+            ConfigCommand::Get => commands::config_get(&mut client)?,
+            ConfigCommand::Set { key, value } => commands::config_set(&mut client, &key, &value)?,
+        };
+        return Ok(output::print_config(config, json));
+    }
     let session = match command {
         Command::Start {
             duration: Some(duration),
@@ -182,7 +215,9 @@ fn client_command(command: Command, json: bool) -> Result<u8, CliError> {
         Command::Daemon
         | Command::Recover
         | Command::Install { .. }
-        | Command::Uninstall { .. } => {
+        | Command::Uninstall { .. }
+        | Command::Sudoers { .. }
+        | Command::Config { .. } => {
             unreachable!("handled in run")
         }
     };

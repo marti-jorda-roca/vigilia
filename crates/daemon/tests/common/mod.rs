@@ -46,6 +46,7 @@ impl Harness {
             timer: Box::new(timer),
             config,
             journal: Journal::open(journal_path(&dir)).unwrap(),
+            config_path: Some(dir.path().join("config.toml")),
             socket_activated: false,
         });
         let (handle, rx) = ServiceHandle::channel();
