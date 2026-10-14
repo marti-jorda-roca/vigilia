@@ -1,0 +1,22 @@
+{"id":1,"method":"hello","params":{},"v":1}
+{"id":2,"method":"session.start","params":{"duration":"2h","lid_closed_awake":true},"v":1}
+{"id":3,"method":"session.extend","params":{"duration":"30m"},"v":1}
+{"id":4,"method":"session.stop","params":{},"v":1}
+{"id":5,"method":"session.status","params":{},"v":1}
+{"id":6,"method":"subscribe","params":{"filter":["session_changed"]},"v":1}
+{"id":7,"method":"debug.simulate_lid","params":{"state":"closed"},"v":1}
+{"id":8,"method":"config.get","params":{},"v":1}
+{"id":9,"method":"config.set","params":{"rules":{"battery_floor_percent":20,"end_at_critical_heat":false}},"v":1}
+{"id":1,"ok":true,"result":{"capabilities":{"backstop":true,"keep_awake_idle":true,"keep_awake_lid_closed":true,"lid_events":true,"power_events":true,"socket_activation":true},"protocol_version":1,"scopes":["session.read"],"server_version":"0.2.0"}}
+{"id":2,"ok":true,"result":{"session":{"ends_at":"2026-10-12T02:00:00Z","id":"00000000-0000-4000-8000-000000000001","lid_closed_awake":false,"started_at":"2026-10-12T00:00:00Z","state":"Active"}}}
+{"id":3,"ok":true,"result":{"session":null}}
+{"id":4,"ok":true,"result":{}}
+{"id":5,"ok":true,"result":{"config":{"rules":{"battery_floor_percent":10,"end_at_critical_heat":true}}}}
+{"error":{"code":"bad_request","message":"bad request"},"id":6,"ok":false}
+{"event":"session_changed","session":{"ends_at":"2026-10-12T02:00:00Z","id":"00000000-0000-4000-8000-000000000001","lid_closed_awake":false,"started_at":"2026-10-12T00:00:00Z","state":"Active"}}
+{"event":"session_changed","session":null}
+{"event":"lid_changed","state":"closed"}
+{"event":"power_changed","power":{"battery_percent":80,"on_ac":false,"thermal":"nominal"}}
+{"detail":"battery at 9% is below the 10% floor","event":"warning","kind":"rule"}
+{"detail":"could not undo the session's changes: injected failure","event":"needs_attention"}
+{"config":{"rules":{"battery_floor_percent":10,"end_at_critical_heat":true}},"event":"config_changed"}

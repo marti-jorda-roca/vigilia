@@ -2,8 +2,9 @@
 
 use chrono::{DateTime, Utc};
 use vigilia_protocol::{
-    Call, Empty, ErrorBody, ErrorCode, HumanDuration, LidState, Session, SessionExtendParams,
-    SessionStartParams, SessionState, SimulateLidParams,
+    Call, ConfigResult, ConfigSetParams, Empty, ErrorBody, ErrorCode, HumanDuration, LidState,
+    RulesPatch, Session, SessionExtendParams, SessionStartParams, SessionState, Settings,
+    SimulateLidParams,
 };
 
 use crate::client::Client;
@@ -90,6 +91,46 @@ pub fn status(client: &mut Client) -> Result<Option<Session>, CliError> {
     client.session(Call::SessionStatus {})
 }
 
+pub fn config_get(client: &mut Client) -> Result<Settings, CliError> {
+    Ok(client.call::<ConfigResult>(Call::ConfigGet {})?.config)
+}
+
+pub fn config_set(client: &mut Client, key: &str, value: &str) -> Result<Settings, CliError> {
+    let params = parse_config_set(key, value)?;
+    Ok(client.call::<ConfigResult>(Call::ConfigSet(params))?.config)
+}
+
+/// Parses one `config set <key> <value>` pair into a patch.
+fn parse_config_set(key: &str, value: &str) -> Result<ConfigSetParams, CliError> {
+    let bad = |message: String| {
+        CliError::Refused(ErrorBody {
+            code: ErrorCode::BadRequest,
+            message,
+        })
+    };
+    let invalid = |expected: &str| {
+        bad(format!(
+            "`{value}` is not a valid value for {key} (expected {expected})"
+        ))
+    };
+    let rules = match key {
+        "rules.battery_floor_percent" => RulesPatch {
+            battery_floor_percent: Some(value.parse().map_err(|_| invalid("0-100"))?),
+            ..RulesPatch::default()
+        },
+        "rules.end_at_critical_heat" => RulesPatch {
+            end_at_critical_heat: Some(value.parse().map_err(|_| invalid("true or false"))?),
+            ..RulesPatch::default()
+        },
+        _ => {
+            return Err(bad(format!(
+                "unknown config key `{key}` (expected rules.battery_floor_percent or rules.end_at_critical_heat)"
+            )));
+        }
+    };
+    Ok(ConfigSetParams { rules: Some(rules) })
+}
+
 /// How much to extend `session` so it lasts `wanted` from `now`, to the second: the shortfall
 /// rounded down, so the countdown then shows `wanted` rather than one second more. `None` when
 /// the session already lasts that long (including when it runs until stopped), or misses by less
@@ -156,6 +197,31 @@ mod tests {
             ..session_ending_in(0, now)
         };
         assert_eq!(shortfall(&until_stopped, hour, now), None);
+    }
+
+    #[test]
+    fn config_set_parsing() {
+        assert_eq!(
+            parse_config_set("rules.battery_floor_percent", "20").unwrap(),
+            ConfigSetParams {
+                rules: Some(RulesPatch {
+                    battery_floor_percent: Some(20),
+                    end_at_critical_heat: None,
+                })
+            }
+        );
+        assert_eq!(
+            parse_config_set("rules.end_at_critical_heat", "false").unwrap(),
+            ConfigSetParams {
+                rules: Some(RulesPatch {
+                    battery_floor_percent: None,
+                    end_at_critical_heat: Some(false),
+                })
+            }
+        );
+        assert!(parse_config_set("rules.nope", "1").is_err());
+        assert!(parse_config_set("rules.battery_floor_percent", "x").is_err());
+        assert!(parse_config_set("rules.end_at_critical_heat", "yes").is_err());
     }
 
     #[test]

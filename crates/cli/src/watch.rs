@@ -68,6 +68,7 @@ fn notice(event: &Event, mode: Mode, out: &mut dyn Write) {
             Some(percent) => format!("battery at {percent}%"),
             None => "power changed".to_owned(),
         },
+        Event::ConfigChanged { .. } => "config changed".to_owned(),
         Event::SessionChanged { .. } => return,
     };
     let _ = match mode {

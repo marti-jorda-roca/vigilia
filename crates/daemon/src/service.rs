@@ -2,6 +2,7 @@
 //! requests and the single deadline timer. Nothing here knows about sockets.
 
 use std::future::Future;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -15,9 +16,9 @@ use vigilia_platform::{
     BACKSTOP_INTERVAL, Capabilities, DeadlineTimer, Platform, PlatformError, TimerFired,
 };
 use vigilia_protocol::{
-    ClientContext, ErrorBody, ErrorCode, Event, EventKind, HelloResult, HumanDuration, LidState,
-    PROTOCOL_VERSION, PowerSnapshot, Request, Session, SessionExtendParams, SessionStartParams,
-    SessionState,
+    ClientContext, ConfigSetParams, ErrorBody, ErrorCode, Event, EventKind, HelloResult,
+    HumanDuration, LidState, PROTOCOL_VERSION, PowerSnapshot, Request, RuleSettings, Session,
+    SessionExtendParams, SessionStartParams, SessionState, Settings,
 };
 
 use crate::bus::{Bus, Subscription};
@@ -42,6 +43,8 @@ pub struct Deps {
     pub timer: Box<dyn DeadlineTimer>,
     pub config: Config,
     pub journal: Journal,
+    /// Where `config.set` persists `[rules]`; `None` keeps changes in memory only.
+    pub config_path: Option<PathBuf>,
     /// The OS started us on the first connection (launchd socket activation).
     pub socket_activated: bool,
 }
@@ -88,6 +91,7 @@ pub struct Service {
     clock: Arc<dyn Clock>,
     timer: Box<dyn DeadlineTimer>,
     config: Config,
+    config_path: Option<PathBuf>,
     journal: Journal,
     bus: Bus,
     machine: SessionMachine,
@@ -111,6 +115,7 @@ impl Service {
             timer,
             config,
             mut journal,
+            config_path,
             socket_activated,
         } = deps;
         match journal.replay(|action| platform.restore(action)) {
@@ -136,6 +141,7 @@ impl Service {
             clock,
             timer,
             config,
+            config_path,
             journal,
             bus: Bus::new(),
             machine: SessionMachine::new(),
@@ -214,6 +220,41 @@ impl Service {
         self.machine.current().cloned()
     }
 
+    pub(crate) fn config_get(&self) -> Settings {
+        Settings {
+            rules: RuleSettings {
+                battery_floor_percent: self.config.rules.battery_floor_percent,
+                end_at_critical_heat: self.config.rules.end_at_critical_heat,
+            },
+        }
+    }
+
+    pub(crate) fn config_set(&mut self, p: ConfigSetParams) -> Result<Settings, ErrorBody> {
+        let patch = p.rules.unwrap_or_default();
+        let mut rules = self.config.rules.clone();
+        if let Some(floor) = patch.battery_floor_percent {
+            if floor > 100 {
+                return Err(error(
+                    ErrorCode::BadRequest,
+                    format!("battery_floor_percent must be between 0 and 100, got {floor}"),
+                ));
+            }
+            rules.battery_floor_percent = floor;
+        }
+        if let Some(heat) = patch.end_at_critical_heat {
+            rules.end_at_critical_heat = heat;
+        }
+        if let Some(path) = &self.config_path {
+            Config::save_rules(path, &rules)
+                .map_err(|e| error(ErrorCode::Internal, e.to_string()))?;
+        }
+        self.config.rules = rules;
+        let settings = self.config_get();
+        self.bus.publish(Event::ConfigChanged { config: settings });
+        self.apply_rules_now();
+        Ok(settings)
+    }
+
     pub(crate) fn start_session(&mut self, p: SessionStartParams) -> Result<Session, ErrorBody> {
         if p.lid_closed_awake && !self.capabilities.keep_awake_lid_closed {
             return Err(error(
@@ -253,11 +294,7 @@ impl Service {
         }
         tracing::info!(id = %session.id, ends_at = ?session.ends_at, lid_closed_awake = p.lid_closed_awake, "session started");
         self.publish_session(Some(session.clone()));
-        // A floor already breached ends the session straight away, through the normal undo.
-        if let Some(snapshot) = self.platform.power_snapshot()
-            && !vigilia_core::rules::evaluate(&snapshot, &self.config.rules).is_empty()
-        {
-            self.on_power(snapshot);
+        if self.apply_rules_now() {
             return Ok(self.machine.current().cloned().unwrap_or(Session {
                 state: SessionState::Ended,
                 ..session
@@ -323,6 +360,24 @@ impl Service {
             });
             let _ = self.end_session();
         }
+    }
+
+    /// A rule the current power snapshot already breaks ends an active session straight away,
+    /// through the normal undo (at session start and when the rules change). Returns whether
+    /// it did.
+    fn apply_rules_now(&mut self) -> bool {
+        let active = self
+            .machine
+            .current()
+            .is_some_and(|s| s.state == SessionState::Active);
+        if active
+            && let Some(snapshot) = self.platform.power_snapshot()
+            && !vigilia_core::rules::evaluate(&snapshot, &self.config.rules).is_empty()
+        {
+            self.on_power(snapshot);
+            return true;
+        }
+        false
     }
 
     pub(crate) fn extend(&mut self, p: SessionExtendParams) -> Result<Session, ErrorBody> {
@@ -432,6 +487,7 @@ impl Service {
     }
 
     fn publish_session(&self, session: Option<Session>) {
+        self.platform.announce_session_change();
         self.bus.publish(Event::SessionChanged { session });
     }
 }
@@ -479,6 +535,7 @@ pub(crate) mod testing {
             timer: Box::new(timer),
             config: Config::default(),
             journal: Journal::open(dir.join("journal.jsonl")).unwrap(),
+            config_path: None,
             socket_activated: false,
         });
         (svc, platform)

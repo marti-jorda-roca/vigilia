@@ -25,7 +25,7 @@ struct TestServer {
     platform: FakePlatform,
     shutdown: Option<oneshot::Sender<()>>,
     thread: Option<JoinHandle<()>>,
-    _dir: tempfile::TempDir,
+    dir: tempfile::TempDir,
 }
 
 impl TestServer {
@@ -35,6 +35,7 @@ impl TestServer {
         let listener = local::bind(&socket).unwrap();
         listener.set_nonblocking(true).unwrap();
         let journal = Journal::open(dir.path().join("journal.jsonl")).unwrap();
+        let config_path = dir.path().join("config.toml");
         let platform = FakePlatform::new();
         let service_platform = Arc::new(platform.clone());
         let (shutdown, shutdown_rx) = oneshot::channel::<()>();
@@ -52,6 +53,7 @@ impl TestServer {
                     timer: Box::new(timer),
                     config: Config::default(),
                     journal,
+                    config_path: Some(config_path),
                     socket_activated: false,
                 });
                 let (handle, rx) = ServiceHandle::channel();
@@ -68,7 +70,7 @@ impl TestServer {
             platform,
             shutdown: Some(shutdown),
             thread: Some(thread),
-            _dir: dir,
+            dir,
         }
     }
 
@@ -275,6 +277,78 @@ fn json_watch_prints_one_line_per_change() {
             Some(SessionState::Ended)
         ]
     );
+}
+
+#[test]
+fn config_get_and_set() {
+    let server = TestServer::start();
+    let mut c = server.client();
+
+    let got = commands::config_get(&mut c).unwrap();
+    assert_eq!(got.rules.battery_floor_percent, 10);
+    assert!(got.rules.end_at_critical_heat);
+
+    let set = commands::config_set(&mut c, "rules.battery_floor_percent", "20").unwrap();
+    assert_eq!(set.rules.battery_floor_percent, 20);
+    assert!(set.rules.end_at_critical_heat);
+
+    let set = commands::config_set(&mut c, "rules.end_at_critical_heat", "false").unwrap();
+    assert_eq!(set.rules.battery_floor_percent, 20);
+    assert!(!set.rules.end_at_critical_heat);
+
+    let got = commands::config_get(&mut c).unwrap();
+    assert_eq!(got.rules.battery_floor_percent, 20);
+    assert!(!got.rules.end_at_critical_heat);
+}
+
+#[test]
+fn config_set_persists_to_the_config_file() {
+    let server = TestServer::start();
+    let mut c = server.client();
+    commands::config_set(&mut c, "rules.battery_floor_percent", "20").unwrap();
+    commands::config_set(&mut c, "rules.end_at_critical_heat", "false").unwrap();
+    let text = std::fs::read_to_string(server.dir.path().join("config.toml")).unwrap();
+    assert!(text.contains("battery_floor_percent = 20"), "{text}");
+    assert!(text.contains("end_at_critical_heat = false"), "{text}");
+}
+
+#[test]
+fn config_set_rejects_bad_keys_and_values() {
+    let server = TestServer::start();
+    let mut c = server.client();
+    assert_eq!(
+        refused(commands::config_set(
+            &mut c,
+            "rules.battery_floor_percent",
+            "101"
+        )),
+        ErrorCode::BadRequest
+    );
+    assert_eq!(
+        refused(commands::config_set(&mut c, "rules.nope", "1")),
+        ErrorCode::BadRequest
+    );
+}
+
+#[test]
+fn watch_prints_config_changed() {
+    let server = TestServer::start();
+    let mut watcher = server.client();
+    let out = Shared::default();
+    let mut sink = out.clone();
+    let watching = std::thread::spawn(move || watch(&mut watcher, Mode::Lines, &mut sink));
+    assert_eq!(out.wait_for_lines(1), vec!["No session running".to_owned()]);
+
+    let mut c = server.client();
+    commands::config_set(&mut c, "rules.battery_floor_percent", "33").unwrap();
+    let lines = out.wait_for_lines(2);
+    assert_eq!(lines.last().map(String::as_str), Some("config changed"));
+
+    drop(server);
+    assert!(matches!(
+        watching.join().unwrap(),
+        Err(CliError::Disconnected)
+    ));
 }
 
 #[test]

@@ -24,3 +24,9 @@ secrets/
 
 # Vigilia runtime state if run from the repo root
 *.log
+
+# Swift package (apps/macos)
+apps/macos/.build/
+apps/macos/dist/
+*.dmg
+.swiftpm/

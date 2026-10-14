@@ -71,6 +71,7 @@ fn serve(dir: &Path, platform: FakePlatform) -> PathBuf {
         timer: Box::new(timer),
         config: Config::default(),
         journal: Journal::open(dir.join("journal.jsonl")).unwrap(),
+        config_path: None,
         socket_activated: false,
     });
     let (handle, rx) = ServiceHandle::channel();

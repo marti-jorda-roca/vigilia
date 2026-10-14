@@ -26,6 +26,15 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
+For the menu bar app in `apps/macos`, the same checks are `swift format`, with
+the rules in `apps/macos/.swift-format`, and a build that fails on warnings:
+
+```sh
+apps/macos/scripts/lint.sh
+apps/macos/scripts/test.sh
+swift format --in-place --parallel -r apps/macos/Sources apps/macos/Tests apps/macos/Package.swift   # fix formatting
+```
+
 Optionally enable the git hooks once per clone:
 
 ```sh

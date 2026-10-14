@@ -84,10 +84,9 @@ fn launchctl(args: &[&str]) -> Result<(), String> {
     }
 }
 
-/// Installs the `LaunchAgents` and the sudoers rule (via `sudo install`). Returns what was
-/// done, for the CLI to print.
+/// Installs only the `LaunchAgents` (no admin rights needed). Returns what was done.
 #[cfg(target_os = "macos")]
-pub fn install(program: &Path, user: &str, paths: &Paths) -> Result<Vec<String>, String> {
+pub fn install_agents(program: &Path, paths: &Paths) -> Result<Vec<String>, String> {
     let dir = launch_agents_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let mut done = Vec::new();
@@ -102,6 +101,94 @@ pub fn install(program: &Path, user: &str, paths: &Paths) -> Result<Vec<String>,
         launchctl(&["load", "-w", &path_str])?;
         done.push(format!("installed LaunchAgent {label}"));
     }
+    Ok(done)
+}
+
+/// Removes only the `LaunchAgents` (including any backstop). No admin rights needed.
+#[cfg(target_os = "macos")]
+pub fn uninstall_agents() -> Result<Vec<String>, String> {
+    let dir = launch_agents_dir();
+    let mut done = Vec::new();
+    for label in [
+        SERVICE_LABEL,
+        RECOVER_LABEL,
+        vigilia_platform::BACKSTOP_LABEL,
+    ] {
+        let path = dir.join(format!("{label}.plist"));
+        if path.exists() {
+            let path_str = path.display().to_string();
+            let _ = launchctl(&["unload", &path_str]);
+            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+            done.push(format!("removed LaunchAgent {label}"));
+        }
+    }
+    Ok(done)
+}
+
+#[cfg(target_os = "macos")]
+fn require_root() -> Result<(), String> {
+    // SAFETY: `geteuid` takes no arguments and cannot fail.
+    if unsafe { libc::geteuid() } == 0 {
+        Ok(())
+    } else {
+        Err("must be run as root".into())
+    }
+}
+
+/// Writes `/etc/sudoers.d/vigilia` for `user` from a root process (the app's admin step).
+/// The rule is staged next to it, where only root can write and where sudo skips it (the
+/// name has a dot), checked with `visudo -cf`, then renamed into place. New files there
+/// get the directory's root:wheel.
+#[cfg(target_os = "macos")]
+pub fn write_sudoers(user: &str) -> Result<(), String> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    require_root()?;
+    let staged = format!("{SUDOERS_PATH}.tmp");
+    let _ = std::fs::remove_file(&staged);
+    let result = (|| {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o440)
+            .open(&staged)
+            .and_then(|mut file| file.write_all(sudoers_rule(user).as_bytes()))
+            .map_err(|e| e.to_string())?;
+        let output = std::process::Command::new("/usr/sbin/visudo")
+            .args(["-cf", staged.as_str()])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !output.status.success() {
+            return Err(format!(
+                "visudo rejected the sudoers rule: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+        std::fs::rename(&staged, SUDOERS_PATH).map_err(|e| e.to_string())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&staged);
+    }
+    result
+}
+
+/// Removes `/etc/sudoers.d/vigilia` from a root process.
+#[cfg(target_os = "macos")]
+pub fn remove_sudoers() -> Result<(), String> {
+    require_root()?;
+    match std::fs::remove_file(SUDOERS_PATH) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Installs the `LaunchAgents` and the sudoers rule (via `sudo install`). Returns what was
+/// done, for the CLI to print.
+#[cfg(target_os = "macos")]
+pub fn install(program: &Path, user: &str, paths: &Paths) -> Result<Vec<String>, String> {
+    let mut done = install_agents(program, paths)?;
     let staged = paths.data_dir.join("sudoers.vigilia");
     std::fs::write(&staged, sudoers_rule(user)).map_err(|e| e.to_string())?;
     let status = std::process::Command::new("/usr/bin/sudo")
@@ -128,21 +215,7 @@ pub fn install(program: &Path, user: &str, paths: &Paths) -> Result<Vec<String>,
 /// Removes the `LaunchAgents` (including any backstop) and the sudoers rule.
 #[cfg(target_os = "macos")]
 pub fn uninstall() -> Result<Vec<String>, String> {
-    let dir = launch_agents_dir();
-    let mut done = Vec::new();
-    for label in [
-        SERVICE_LABEL,
-        RECOVER_LABEL,
-        vigilia_platform::BACKSTOP_LABEL,
-    ] {
-        let path = dir.join(format!("{label}.plist"));
-        if path.exists() {
-            let path_str = path.display().to_string();
-            let _ = launchctl(&["unload", &path_str]);
-            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
-            done.push(format!("removed LaunchAgent {label}"));
-        }
-    }
+    let mut done = uninstall_agents()?;
     let status = std::process::Command::new("/usr/bin/sudo")
         .args(["/bin/rm", "-f", SUDOERS_PATH])
         .status()
@@ -162,6 +235,26 @@ pub fn install(_program: &Path, _user: &str, _paths: &Paths) -> Result<Vec<Strin
 #[cfg(not(target_os = "macos"))]
 pub fn uninstall() -> Result<Vec<String>, String> {
     Err("`vigilia uninstall` is only supported on macOS for now".into())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn install_agents(_program: &Path, _paths: &Paths) -> Result<Vec<String>, String> {
+    Err("`vigilia install` is only supported on macOS for now".into())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn uninstall_agents() -> Result<Vec<String>, String> {
+    Err("`vigilia uninstall` is only supported on macOS for now".into())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn write_sudoers(_user: &str) -> Result<(), String> {
+    Err("`vigilia sudoers` is only supported on macOS for now".into())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn remove_sudoers() -> Result<(), String> {
+    Err("`vigilia sudoers` is only supported on macOS for now".into())
 }
 
 #[cfg(test)]

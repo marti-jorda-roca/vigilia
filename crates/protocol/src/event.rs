@@ -4,7 +4,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::response::Session;
+use crate::response::{Session, Settings};
 
 /// Whether the laptop lid is open or closed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
@@ -50,6 +50,8 @@ pub enum Event {
     Warning { kind: String, detail: String },
     /// An undo step failed; the machine may not sleep normally until this is resolved.
     NeedsAttention { detail: String },
+    /// The settings changed (`config.set`).
+    ConfigChanged { config: Settings },
 }
 
 #[derive(
@@ -62,6 +64,7 @@ pub enum EventKind {
     PowerChanged,
     Warning,
     NeedsAttention,
+    ConfigChanged,
 }
 
 impl Event {
@@ -72,6 +75,7 @@ impl Event {
             Event::PowerChanged { .. } => EventKind::PowerChanged,
             Event::Warning { .. } => EventKind::Warning,
             Event::NeedsAttention { .. } => EventKind::NeedsAttention,
+            Event::ConfigChanged { .. } => EventKind::ConfigChanged,
         }
     }
 }
