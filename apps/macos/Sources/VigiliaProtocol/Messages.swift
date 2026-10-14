@@ -12,8 +12,33 @@ public let protocolVersion = 1
 
 // MARK: - Requests
 
-/// Durations travel as strings such as `"1h30m"`, written like the Rust `HumanDuration` does.
+/// Durations travel as strings such as `"1h30m"`, written and read like the Rust
+/// `HumanDuration` does: one or more `<number><unit>` groups, units `d`, `h`, `m`, `s`.
 public enum HumanDuration {
+    private static let units: [Character: Int] = ["d": 86_400, "h": 3_600, "m": 60, "s": 1]
+
+    /// Seconds in `text`, or `nil` when it isn't a duration. Surrounding whitespace and the
+    /// case of the units don't matter; `"2h 30m"` (a space inside) is rejected, as in the CLI.
+    public static func parse(_ text: String) -> Int? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        var total = 0
+        var number = ""
+        for c in trimmed {
+            if c.isASCII, c.isNumber {
+                number.append(c)
+                continue
+            }
+            guard let unit = units[Character(c.lowercased())], let n = Int(number) else { return nil }
+            let (part, overflowA) = n.multipliedReportingOverflow(by: unit)
+            let (sum, overflowB) = total.addingReportingOverflow(part)
+            guard !overflowA, !overflowB else { return nil }
+            total = sum
+            number = ""
+        }
+        return number.isEmpty ? total : nil
+    }
+
     public static func format(seconds: Int) -> String {
         var rest = max(seconds, 0)
         if rest == 0 { return "0s" }

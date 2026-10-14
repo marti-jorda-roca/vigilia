@@ -1,29 +1,25 @@
 import SwiftUI
 
 /// Ends the session only after a press held for a second, so a stray click can't end it.
-/// A ring fills while holding; letting go early does nothing.
+/// A bar of pixel blocks fills while holding; letting go early does nothing.
 struct HoldToEndButton: View {
-    var title = "Hold to end"
+    var title = "HOLD TO END"
     let action: () -> Void
 
     @State private var progress: CGFloat = 0
     @State private var holding = false
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        HStack(spacing: 8) {
-            ZStack {
-                Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 2.5)
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(Color.red, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-            }
-            .frame(width: 16, height: 16)
-            Text(holding ? "Keep holding…" : title)
+        ZStack {
+            PixelBox(border: Pixel.red)
+            BlockFill(progress: progress)
+                .fill(Pixel.red)
+                .padding(Pixel.unit * 2)
+            PixelText(holding ? "KEEP HOLDING" : title)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color.red.opacity(holding ? 0.2 : 0.1)))
+        .frame(height: Pixel.unit * 14)
+        .opacity(isEnabled ? 1 : 0.45)
         .contentShape(Rectangle())
         .onLongPressGesture(minimumDuration: 1, maximumDistance: 30) {
             progress = 0
@@ -37,7 +33,28 @@ struct HoldToEndButton: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(title)
+        .accessibilityLabel("Hold to end the session")
         .accessibilityAction { action() }
+    }
+}
+
+/// Whole blocks from the left, so the bar fills in steps rather than smoothly.
+private struct BlockFill: Shape {
+    var progress: CGFloat
+    var blocks = 16
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let filled = Int((progress * CGFloat(blocks)).rounded(.down))
+        let width = rect.width / CGFloat(blocks)
+        var path = Path()
+        for i in 0..<filled {
+            path.addRect(CGRect(x: rect.minX + CGFloat(i) * width, y: rect.minY, width: width - Pixel.unit, height: rect.height))
+        }
+        return path
     }
 }

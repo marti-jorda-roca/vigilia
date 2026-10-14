@@ -49,6 +49,12 @@ final class SessionStore: ObservableObject {
 
     var hasAlert: Bool { needsAttention != nil || !warnings.isEmpty }
 
+    /// The session when it has a timeout and is running: the only time the menu bar shows time.
+    var timedSession: Session? {
+        guard let session, session.state == .active, session.endsAt != nil else { return nil }
+        return session
+    }
+
     // MARK: Lifecycle
 
     /// Once at launch: learn the session and capabilities, then stay connected only if a

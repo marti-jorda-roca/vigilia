@@ -20,6 +20,7 @@ let package = Package(
         // scripts/build-app.sh; `swift run Vigilia` works without a bundle for development.
         .executableTarget(name: "Vigilia", dependencies: ["VigiliaProtocol"]),
         .testTarget(name: "VigiliaProtocolTests", dependencies: ["VigiliaProtocol"]),
+        .testTarget(name: "VigiliaTests", dependencies: ["Vigilia"]),
     ],
     swiftLanguageModes: [.v5]
 )

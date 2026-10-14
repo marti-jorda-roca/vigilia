@@ -88,14 +88,18 @@ apps/macos/
     Paths.swift                 # socket path, honouring VIGILIA_HOME (mirrors crates/core/src/paths.rs)
   Sources/Vigilia/              # the app (executable target)
     App.swift                   # @main, NSApplicationDelegate, LSUIElement
-    StatusItemController.swift  # NSStatusItem: template icon + countdown title; NSPopover hosting SwiftUI
+    StatusItemController.swift  # NSStatusItem: lantern icon + countdown title; the menu panel under it
+    MenuPanel.swift             # borderless panel placed under the status item (MenuPlacement, unit-tested)
+    Lantern.swift               # pixel lantern art: unlit / lit / alert, for the menu bar and the menu
     SessionStore.swift          # @MainActor ObservableObject: connection state, session, capabilities, warnings
     Doorbell.swift              # notify_register_dispatch("com.vigilia.session-changed")
     ServiceConnection.swift     # connect → hello → subscribe; spawn the bundled daemon if the socket is absent;
                                 # reconnect backoff (1, 2, 4 … 30 s) only after an unexpected drop mid-session
-    Views/MenuView.swift        # start form (d/h/m pickers, presets, "until stopped", lid toggle), countdown,
-                                # +15m/+30m/+1h extend, HoldToEndButton, warnings, Settings…/Quit
-    Views/HoldToEndButton.swift # press and hold ~1 s with a progress ring → session.stop
+    Views/MenuView.swift        # start form (optional timeout field + 30m/1h/2h/4h chips; empty = until you hold
+                                # to end; lid toggle), countdown, +15m/+30m/+1h extend, HoldToEndButton,
+                                # warnings, Settings…/Quit
+    Views/HoldToEndButton.swift # press and hold ~1 s while a bar of pixel blocks fills → session.stop
+    Views/Pixel.swift, PixelFont.swift # the banner's pixel style: 5x7 bitmap font, notched boxes, buttons
     Views/SettingsView.swift    # battery floor, end at critical heat (config.get/set), lid default (UserDefaults),
                                 # launch at login (SMAppService.mainApp), setup/repair, versions
     Setup.swift                 # service setup (see Part C)
@@ -107,7 +111,7 @@ apps/macos/
                                  # hello/start/subscribe/extend/stop, and the CLI + app see the same session
   scripts/test.sh               # swift test, adding the Swift Testing paths when only the Command Line Tools are installed
   scripts/build-app.sh          # universal build + bundle + sign (see Part C)
-  Resources/Info.plist, AppIcon, status icon (template PDF/SF Symbol)
+  Resources/Info.plist, AppIcon (the status icon is the pixel lantern, drawn in code)
 ```
 
 **Connection lifecycle (energy):**
@@ -125,10 +129,10 @@ apps/macos/
 
 **Drawing (energy):**
 - The status title shows `1h 23m`. A non-repeating `Timer` is scheduled for the next instant the label changes (from `Countdown`), with a few seconds of tolerance, so there is at most one redraw per minute.
-- Indefinite sessions show the elapsed time the same way.
-- While the popover is open, a 1 s timer shows seconds; it is invalidated on close.
+- Sessions without a timeout show only the lit lantern: no title and no timer. The menu shows how long they have run.
+- While the menu is open, a 1 s timer shows seconds; it is invalidated on close.
 - No animation in the status item. App Nap is allowed (no `NSProcessInfo` activity assertions).
-- Warning state: the status icon switches to a variant with a badge. Needs-attention shows a "Retry" button that calls `session.stop`.
+- Warning state: the lantern's flame turns red. Needs-attention shows a "Retry" button that calls `session.stop`.
 
 **Capabilities gate the UI:**
 - The lid toggle is shown only when `keep_awake_lid_closed` is set. It is enabled only when `/etc/sudoers.d/vigilia` exists; otherwise it shows "Set up…".
@@ -182,7 +186,7 @@ apps/macos/
 
 1. **Rust side (Part A).** Protocol, config, doorbell, install split, CLI `config`.
 2. **`VigiliaProtocol` Swift module + tests + the CI `macos-app` job.**
-3. **App UI.** Status item, popover, settings, connection lifecycle.
+3. **App UI.** Status item, menu panel, settings, connection lifecycle.
 4. **Packaging, setup flow, release job, docs, v0.3.0.**
 
 ## Verification

@@ -153,6 +153,19 @@ struct ExamplesTests {
         #expect(VigiliaDate.parse("yesterday") == nil)
     }
 
+    @Test func durationsParseLikeTheCli() {
+        // The cases from crates/protocol/src/duration.rs.
+        #expect(HumanDuration.parse("2h") == 7_200)
+        #expect(HumanDuration.parse("30m") == 1_800)
+        #expect(HumanDuration.parse("90s") == 90)
+        #expect(HumanDuration.parse("1d2h30m") == 86_400 + 7_200 + 1_800)
+        #expect(HumanDuration.parse(" 2H ") == 7_200)
+        #expect(HumanDuration.parse("1h1h") == 7_200)
+        for bad in ["", "h", "10", "2x", "2h 30m", "99999999999999999999d", "-1h", "1.5h"] {
+            #expect(HumanDuration.parse(bad) == nil, "\(bad)")
+        }
+    }
+
     @Test func durationsMatchTheRustFormat() {
         #expect(HumanDuration.format(seconds: 0) == "0s")
         #expect(HumanDuration.format(seconds: 5_400) == "1h30m")

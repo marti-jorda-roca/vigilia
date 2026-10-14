@@ -26,6 +26,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = StatusItemController(store: store) { settingsWindow.show() }
         doorbell = Doorbell { store.doorbellRang() }
         store.launched()
+        #if DEBUG
+            // For screenshots and manual checks without clicking: debug builds only.
+            let environment = ProcessInfo.processInfo.environment
+            if environment["VIGILIA_DEBUG_OPEN_MENU"] != nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.statusItem.openMenu() }
+            }
+            if environment["VIGILIA_DEBUG_OPEN_SETTINGS"] != nil {
+                settingsWindow.show()
+            }
+        #endif
     }
 
     func applicationWillTerminate(_: Notification) {
