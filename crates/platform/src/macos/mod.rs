@@ -7,6 +7,7 @@ mod events;
 mod power;
 mod timer;
 
+pub use power::sleep_disabled;
 pub use timer::GcdTimer;
 
 use std::path::Path;

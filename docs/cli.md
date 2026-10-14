@@ -81,7 +81,7 @@ Undoes anything a crashed session left behind and restores normal sleep. It take
 <user> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0
 ```
 
-`uninstall` removes all of it, including any backstop job.
+`uninstall` removes all of it, including any backstop job. If `disablesleep` is still on (for example because the service was unloaded mid-session), it sets it back to `0` before removing the rule, so lid-closed sleep works again.
 
 ### `vigilia debug simulate-lid close|open`
 

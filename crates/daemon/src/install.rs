@@ -125,7 +125,10 @@ pub fn install(program: &Path, user: &str, paths: &Paths) -> Result<Vec<String>,
     Ok(done)
 }
 
-/// Removes the `LaunchAgents` (including any backstop) and the sudoers rule.
+/// Removes the `LaunchAgents` (including any backstop) and the sudoers rule. If
+/// `disablesleep` is still on, it is cleared first: unloading the service ends any session
+/// without its restore, and once the rule is gone nothing can clear the flag, so the Mac
+/// would stay awake with the lid closed.
 #[cfg(target_os = "macos")]
 pub fn uninstall() -> Result<Vec<String>, String> {
     let dir = launch_agents_dir();
@@ -142,6 +145,16 @@ pub fn uninstall() -> Result<Vec<String>, String> {
             std::fs::remove_file(&path).map_err(|e| e.to_string())?;
             done.push(format!("removed LaunchAgent {label}"));
         }
+    }
+    if vigilia_platform::macos::sleep_disabled().map_err(|e| e.to_string())? {
+        let status = std::process::Command::new("/usr/bin/sudo")
+            .args(["/usr/bin/pmset", "-a", "disablesleep", "0"])
+            .status()
+            .map_err(|e| e.to_string())?;
+        if !status.success() {
+            return Err("clearing pmset disablesleep failed".into());
+        }
+        done.push("restored lid-closed sleep (pmset disablesleep was 1)".into());
     }
     let status = std::process::Command::new("/usr/bin/sudo")
         .args(["/bin/rm", "-f", SUDOERS_PATH])

@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Open-source project files: `CONTRIBUTING.md`, `SECURITY.md`,
   `CODE_OF_CONDUCT.md`, issue/PR templates, `CODEOWNERS`, and Dependabot.
 
+### Fixed
+
+- `vigilia uninstall` clears a leftover `pmset disablesleep 1` before removing
+  the sudoers rule, so the Mac sleeps with the lid closed again.
+
 ## [0.2.0] - 2026-10-13
 
 ### Added
