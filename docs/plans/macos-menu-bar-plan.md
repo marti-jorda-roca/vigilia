@@ -76,7 +76,7 @@ Gaps found in the current code that this step has to fill:
 
 ```
 apps/macos/
-  Package.swift                 # swift-tools 5.9; macOS 13 (SMAppService), iOS 16 for the library
+  Package.swift                 # swift-tools 6.0 (Swift Testing; Swift 5 language mode); macOS 13 (SMAppService), iOS 16 for the library
   Sources/VigiliaProtocol/      # library, Foundation + Network only; reusable by a future iOS app
     Messages.swift              # Call/Request encoding, Session, SessionState, Capabilities, HelloResult,
                                 # Settings, Event (tagged by "event", unknown → .unknown), ErrorCode (+ .unknown)
@@ -105,6 +105,7 @@ apps/macos/
     FramerTests.swift, CountdownTests.swift, ClientTests.swift (in-memory transport)
     DaemonIntegrationTests.swift # runs only when VIGILIA_BIN is set: real daemon with a temp VIGILIA_HOME,
                                  # hello/start/subscribe/extend/stop, and the CLI + app see the same session
+  scripts/test.sh               # swift test, adding the Swift Testing paths when only the Command Line Tools are installed
   scripts/build-app.sh          # universal build + bundle + sign (see Part C)
   Resources/Info.plist, AppIcon, status icon (template PDF/SF Symbol)
 ```
