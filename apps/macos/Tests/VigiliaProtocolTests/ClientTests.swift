@@ -126,6 +126,17 @@ struct ClientTests {
         await #expect(throws: ClientError.disconnected) { try await client.status() }
     }
 
+    @Test func aServiceThatNeverAnswersTimesOut() async throws {
+        let transport = MemoryTransport()
+        let client = VigiliaClient(transport: transport, requestTimeout: 0.05)
+        await #expect(throws: ClientError.timedOut) { try await client.hello() }
+        // The connection is closed: the stream ends and later calls fail straight away.
+        for await _ in client.events {
+            Issue.record("no events expected")
+        }
+        await #expect(throws: ClientError.disconnected) { try await client.status() }
+    }
+
     @Test func aResponseWithoutAnIdFailsPendingCalls() async throws {
         let transport = MemoryTransport()
         let client = VigiliaClient(transport: transport)

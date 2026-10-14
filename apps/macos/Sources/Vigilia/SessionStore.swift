@@ -275,6 +275,8 @@ final class SessionStore: ObservableObject {
         switch error {
         case TransportError.serviceAbsent, ClientError.disconnected:
             "The Vigilia service isn't running."
+        case ClientError.timedOut:
+            "The Vigilia service didn't answer. Check `vigilia status` in Terminal."
         case let TransportError.failed(reason):
             "Could not reach the Vigilia service: \(reason)"
         default:

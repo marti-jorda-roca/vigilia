@@ -3,10 +3,14 @@ import Foundation
 public enum ClientError: Error, Equatable, LocalizedError, Sendable {
     /// The connection closed before the reply arrived.
     case disconnected
+    /// No reply within the request timeout. The connection is closed: a service that stops
+    /// answering one request won't answer the next.
+    case timedOut
 
     public var errorDescription: String? {
         switch self {
         case .disconnected: "the connection to the service closed"
+        case .timedOut: "the service didn't answer"
         }
     }
 }
@@ -16,6 +20,7 @@ public enum ClientError: Error, Equatable, LocalizedError, Sendable {
 /// the service hangs up.
 public actor VigiliaClient {
     private let transport: Transport
+    private let requestTimeout: TimeInterval
     private var nextID: UInt64 = 0
     private var pending: [UInt64: CheckedContinuation<Data, Error>] = [:]
     private var closed = false
@@ -24,8 +29,12 @@ public actor VigiliaClient {
     public nonisolated let events: AsyncStream<Event>
     private let eventSink: AsyncStream<Event>.Continuation
 
-    public init(transport: Transport) {
+    /// `requestTimeout`: how long a call waits for its reply. The service answers within
+    /// milliseconds; a socket that accepts but never answers (say, a launchd listener whose
+    /// service can't start) must not hang the caller.
+    public init(transport: Transport, requestTimeout: TimeInterval = 5) {
         self.transport = transport
+        self.requestTimeout = requestTimeout
         (events, eventSink) = AsyncStream.makeStream(of: Event.self)
         // Runs until the connection closes; `close()` ends it.
         Task { await self.readLoop() }
@@ -45,6 +54,7 @@ public actor VigiliaClient {
         let id = nextID
         let line = try Request(id: id, call: call).encodedLine()
         let transport = transport
+        let timeout = UInt64(requestTimeout * 1_000_000_000)
         let reply = try await withCheckedThrowingContinuation { continuation in
             pending[id] = continuation
             Task {
@@ -53,6 +63,10 @@ public actor VigiliaClient {
                 } catch {
                     self.fail(id: id, with: error)
                 }
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: timeout)
+                self.timedOut(id: id)
             }
         }
         return try ServerMessage.result(T.self, from: reply)
@@ -145,6 +159,12 @@ public actor VigiliaClient {
 
     private func fail(id: UInt64, with error: Error) {
         pending.removeValue(forKey: id)?.resume(throwing: error)
+    }
+
+    private func timedOut(id: UInt64) {
+        guard let continuation = pending.removeValue(forKey: id) else { return }
+        continuation.resume(throwing: ClientError.timedOut)
+        close()
     }
 
     private func finish() {
