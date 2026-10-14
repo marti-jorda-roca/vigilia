@@ -27,6 +27,8 @@ final class SessionStore: ObservableObject {
     /// Cached between launches, so the menu can be drawn without connecting.
     @Published private(set) var capabilities: Capabilities
     @Published private(set) var settings: Settings?
+    /// Set when the service is too old to have `config.get` (before v0.3).
+    @Published private(set) var settingsUnsupported = false
     @Published private(set) var serverVersion: String?
     @Published private(set) var warnings: [Warning] = []
     @Published private(set) var needsAttention: String?
@@ -87,7 +89,13 @@ final class SessionStore: ObservableObject {
         Task {
             await refresh(spawn: true)
             await perform { client in
-                self.settings = try await client.configGet()
+                do {
+                    self.settings = try await client.configGet()
+                    self.settingsUnsupported = false
+                } catch let refused as ErrorBody where refused.code == .badRequest {
+                    // An older service doesn't know the method at all.
+                    self.settingsUnsupported = true
+                }
             }
         }
     }

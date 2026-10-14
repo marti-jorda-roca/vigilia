@@ -8,6 +8,9 @@ struct SettingsView: View {
     @AppStorage(Preferences.lidClosedByDefault) private var lidClosedByDefault = false
     @State private var launchAtLogin = LoginItem.enabled
     @State private var loginError: String?
+    @State private var copied = false
+
+    private static let setupCommand = "vigilia install"
 
     var body: some View {
         VStack(alignment: .leading, spacing: Pixel.unit * 10) {
@@ -28,6 +31,9 @@ struct SettingsView: View {
                         Toggle(isOn: Binding(get: { rules.endAtCriticalHeat }, set: { store.setEndAtCriticalHeat($0) })) {
                             PixelText("END AT CRITICAL HEAT")
                         }
+                    } else if store.settingsUnsupported {
+                        Text("The running service (\(store.serverVersion ?? "older")) has no settings yet. Update the CLI with `cargo install --path crates/cli --locked` from the repo; the service picks it up the next time it starts.")
+                            .foregroundColor(Pixel.dim)
                     } else {
                         Text(store.connection == .connecting ? "Connecting…" : "Not connected to the service.")
                             .foregroundColor(Pixel.dim)
@@ -49,6 +55,7 @@ struct SettingsView: View {
             Section(title: "GENERAL") {
                 Toggle(isOn: $launchAtLogin) { PixelText("LAUNCH AT LOGIN") }
                     .disabled(!LoginItem.available)
+                    .help(LoginItem.available ? "Start Vigilia when you log in." : "Needs Vigilia to run as an app from Applications.")
                     .onChange(of: launchAtLogin) { on in
                         guard on != LoginItem.enabled else { return }
                         do {
@@ -70,14 +77,17 @@ struct SettingsView: View {
             Section(title: "SERVICE") {
                 Row(label: "SERVICE", value: serviceStatus)
                 Row(label: "LID SETUP", value: store.setup.sudoersInstalled ? "set up" : "not set up")
+                // In-app setup comes with the packaged app. Until then, the buttons hand over the
+                // command to run in Terminal.
                 HStack(spacing: Pixel.unit * 4) {
-                    Button {} label: { PixelText("SET UP") }
-                    Button {} label: { PixelText("REPAIR") }
+                    Button(action: copySetupCommand) {
+                        PixelText(copied ? "COPIED" : setupAction.title)
+                    }
+                    .help("Copy `\(Self.setupCommand)` to run in Terminal.")
+                    Spacer()
                 }
                 .buttonStyle(PixelButtonStyle())
-                .disabled(true)
-                Text("In-app setup comes with the packaged app. Use `vigilia install` for now.")
-                    .foregroundColor(Pixel.dim)
+                Text(setupAction.explanation).foregroundColor(Pixel.dim)
             }
 
             Section(title: "ABOUT") {
@@ -94,6 +104,28 @@ struct SettingsView: View {
         .frame(width: 440)
         .background(ZStack(alignment: .top) { Pixel.background; PixelStars().frame(height: 60) })
         .pixelSurface()
+    }
+
+    private var setupAction: (title: String, explanation: String) {
+        let setup = store.setup
+        let run = "Run `\(Self.setupCommand)` in Terminal"
+        if setup.needsRepair {
+            return ("REPAIR", "The service points at a program that moved. \(run) to fix it; the button copies the command.")
+        }
+        if setup.agentInstalled, setup.sudoersInstalled {
+            return ("REINSTALL", "The service and lid-closed sessions are set up. \(run) again to reinstall; the button copies the command.")
+        }
+        return ("SET UP", "\(run) to install the service and lid-closed sessions; the button copies the command.")
+    }
+
+    private func copySetupCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(Self.setupCommand, forType: .string)
+        copied = true
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            copied = false
+        }
     }
 
     private var serviceStatus: String {
