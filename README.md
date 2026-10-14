@@ -1,10 +1,10 @@
 <p align="center"><img src="docs/assets/vigilia-banner.svg" alt="Vigilia: a pixel-art guard holding a lantern" width="640"></p>
 
-Keep your laptop awake for a set time, from the terminal or from a coding agent, and pay almost nothing in battery for it.
+Keep your laptop awake for a set time, from the terminal or from a coding agent, and pay almost nothing in battery for it. Your agents keep working even with the lid closed.
 
 <p align="center"><img src="docs/assets/demo.gif" alt="Terminal demo: vigilia start 2h, extend 30m, start 3h --extend, then stop" width="720"></p>
 
-For more details, see the [CLI documentation](docs/cli.md).
+For more details, see the [CLI documentation](docs/cli.md). To hook Vigilia into Claude Code or Codex, see [Using Vigilia with coding agents](docs/agents.md).
 
 ## Install
 
