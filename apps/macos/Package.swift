@@ -12,9 +12,13 @@ let package = Package(
     ],
     products: [
         .library(name: "VigiliaProtocol", targets: ["VigiliaProtocol"]),
+        .executable(name: "Vigilia", targets: ["Vigilia"]),
     ],
     targets: [
         .target(name: "VigiliaProtocol"),
+        // The menu bar app. Bundling (Info.plist, the helper binary, signing) is done by
+        // scripts/build-app.sh; `swift run Vigilia` works without a bundle for development.
+        .executableTarget(name: "Vigilia", dependencies: ["VigiliaProtocol"]),
         .testTarget(name: "VigiliaProtocolTests", dependencies: ["VigiliaProtocol"]),
     ],
     swiftLanguageModes: [.v5]
